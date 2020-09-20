@@ -72,6 +72,7 @@ impl XBSer {
         trace!("{:?} SEROUT: {}", self.portname, data);
         data.push_str("\r\n");
         // Give the receiver a chance to process
+        // FIXME: lock this only once
         self.swrite.lock().unwrap().write_all(data.as_bytes())?;
         self.swrite.lock().unwrap().flush()
     }

@@ -46,9 +46,6 @@ pub struct XB {
     /// My 64-bit MAC address
     mymac: u64,
 
-    /// Frames to transmit
-    writerrx: crossbeam_channel::Receiver<Bytes>,
-
     /// Maximum packet size
     maxpacketsize: usize,
 }
@@ -127,95 +124,20 @@ impl XB {
         assert_response(ser.readln().unwrap(), "OK");
 
         let ser2 = ser.clone();
+        thread::spawn(move || writerthread(ser2, writerrx));
         
         (XB {
             ser,
             mymac,
             maxpacketsize,
-            writerrx,
         }, writertx)
-    }
-
-    pub fn mainloop(&mut self) -> io::Result<()> {
-        loop {
-            // First, check to see if we're allowed to transmit.  If not, just
-            // try to read and ignore all else.
-            if let Some(delayamt) = self.txdelayrequired() {
-                // We can't transmit yet.  Just read, but with a time box.
-                self.enterrxmode()?;
-                let res = self.readerlinesrx.recv_timeout(delayamt);
-                match res {
-                    Ok(msg) => {
-                        self.handlerx(msg, self.readqual)?;
-                        continue;
-                    },
-                    Err(e) => {
-                        if e.is_timeout() {
-                            debug!("readerthread: txdelay timeout expired");
-                            self.txdelay = None;
-                            // Now we can fall through to the rest of the logic - already in read mode.
-                        } else {
-                            res.unwrap(); // disconnected - crash
-                        }
-                    }
-                }
-            } else {
-                // We are allowed to transmit.
-                
-                // Do we have anything to send?  Check at the top and keep checking
-                // here so we send as much as possible before going back into read
-                // mode.
-                if ! self.extradata.is_empty() {
-                    // Send the extradata immediately
-                    self.dosend(vec![])?;
-                    continue;
-                }
-                let r = self.txblocksrx.try_recv();
-                match r {
-                    Ok(data) => {
-                        self.dosend(data)?;
-                        continue;
-                    },
-                    Err(e) => {
-                        if e.is_disconnected() {
-                            // other threads crashed
-                            r.unwrap();
-                        }
-                        // Otherwise - nothing to write, go on through.
-                    }
-                }
-
-                self.enterrxmode()?;
-            }
-
-            // At this point, we're in rx mode with no timeout.  No extradata
-            // is waiting either.
-            // Now we wait for either a write request or data.
-
-            let mut sel = crossbeam_channel::Select::new();
-            let readeridx = sel.recv(&self.readerlinesrx);
-            let blocksidx = sel.recv(&self.txblocksrx);
-            match sel.ready() {
-                i if i == readeridx => {
-                    // We have data coming in from the radio.
-                    let msg = self.readerlinesrx.recv().unwrap();
-                    self.handlerx(msg, self.readqual)?;
-                },
-                i if i == blocksidx => {
-                    // We have something to send.  Stop the receiver and then go
-                    // back to the top of the loop to handle it.
-
-                    self.rxstop()?;
-                    
-                },
-                _ => panic!("Invalid response from sel.ready()"),
-            }
-        }
-    }
-
-    pub fn transmit(&mut self, data: &[u8])  {
-        self.txblockstx.send(data.to_vec()).unwrap();
     }
 }
 
-
+fn writerthread(ser: XBSer, writerrx: crossbeam_channel::Receiver<Bytes>) {
+    for data in writerrx.iter() {
+        // FIXME: lock this only once
+        ser.swrite.lock().unwrap().write_all(data).expect("Errror on serial port sending");
+        ser.swrite.lock().unwrap().flush();
+    }
+}
