@@ -16,7 +16,7 @@
 
 */
 
-use crate::ser::LoraSer;
+use crate::ser::XBSer;
 use log::*;
 use std::fs;
 use std::io::{BufRead, BufReader, Error, ErrorKind};
@@ -39,8 +39,8 @@ pub fn mkerror(msg: &str) -> Error {
 pub struct ReceivedFrames(pub Vec<u8>, pub Option<(String, String)>);
 
 #[derive(Clone)]
-pub struct LoraStik {
-    ser: LoraSer,
+pub struct XB {
+    ser: XBSer,
 
     // Lines coming from the radio
     readerlinesrx: crossbeam_channel::Receiver<String>,
@@ -85,7 +85,7 @@ pub struct LoraStik {
 
 /// Reads the lines from the radio and sends them down the channel to
 /// the processing bits.
-fn readerlinesthread(mut ser: LoraSer, tx: crossbeam_channel::Sender<String>) {
+fn readerlinesthread(mut ser: XBSer, tx: crossbeam_channel::Sender<String>) {
     loop {
         let line = ser.readln().expect("Error reading line");
         if let Some(l) = line {
@@ -100,7 +100,7 @@ fn readerlinesthread(mut ser: LoraSer, tx: crossbeam_channel::Sender<String>) {
 /// Assert that a given response didn't indicate an EOF, and that it
 /// matches the given text.  Return an IOError if either of these
 /// conditions aren't met.  The response type is as given by
-/// ['ser::LoraSer::readln'].
+/// ['ser::XBSer::readln'].
 pub fn assert_response(resp: String, expected: String) -> io::Result<()> {
     if resp == expected {
         Ok(())
@@ -109,12 +109,12 @@ pub fn assert_response(resp: String, expected: String) -> io::Result<()> {
     }
 }
 
-impl LoraStik {
-    /// Creates a new LoraStik.  Returns an instance to be used for sending,
+impl XB {
+    /// Creates a new XB.  Returns an instance to be used for sending,
     /// as well as a separate receiver to be used in a separate thread to handle
     /// incoming frames.  The bool specifies whether or not to read the quality
     /// parameters after a read.
-    pub fn new(ser: LoraSer, readqual: bool, txwait: u64, eotwait: u64, maxpacketsize: usize, pack: bool, txslot: u64) -> (LoraStik, crossbeam_channel::Receiver<ReceivedFrames>) {
+    pub fn new(ser: XBSer, readqual: bool, txwait: u64, eotwait: u64, maxpacketsize: usize, pack: bool, txslot: u64) -> (XB, crossbeam_channel::Receiver<ReceivedFrames>) {
         let (readerlinestx, readerlinesrx) = crossbeam_channel::unbounded();
         let (txblockstx, txblocksrx) = crossbeam_channel::bounded(2);
         let (readeroutput, readeroutputreader) = crossbeam_channel::unbounded();
@@ -123,7 +123,7 @@ impl LoraStik {
         
         thread::spawn(move || readerlinesthread(ser2, readerlinestx));
         
-        (LoraStik { readqual, ser, readeroutput, readerlinesrx, txblockstx, txblocksrx, maxpacketsize, pack,
+        (XB { readqual, ser, readeroutput, readerlinesrx, txblockstx, txblocksrx, maxpacketsize, pack,
                     txdelay: None,
                     txwait: Duration::from_millis(txwait),
                     eotwait: Duration::from_millis(eotwait),
