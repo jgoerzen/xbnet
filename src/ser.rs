@@ -37,7 +37,7 @@ impl XBSer {
     /// Initialize the serial system, configuring the port.
     pub fn new(portname: PathBuf) -> io::Result<XBSer> {
         let settings = SerialPortSettings {
-            baud_rate: 115200,
+            baud_rate: 115200, // FIXME: make this configurable, default 9600
             data_bits: DataBits::Eight,
             flow_control: FlowControl::None,
             parity: Parity::None,
