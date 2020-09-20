@@ -25,19 +25,19 @@ use std::time::Duration;
 use std::path::PathBuf;
 
 #[derive(Clone)]
-pub struct LoraSer {
+pub struct XBSer {
     // BufReader can't be cloned.  Sigh.
     pub br: Arc<Mutex<BufReader<Box<dyn SerialPort>>>>,
     pub swrite: Arc<Mutex<Box<dyn SerialPort>>>,
     pub portname: PathBuf
 }
 
-impl LoraSer {
+impl XBSer {
 
     /// Initialize the serial system, configuring the port.
-    pub fn new(portname: PathBuf) -> io::Result<LoraSer> {
+    pub fn new(portname: PathBuf) -> io::Result<XBSer> {
         let settings = SerialPortSettings {
-            baud_rate: 57600,
+            baud_rate: 115200,
             data_bits: DataBits::Eight,
             flow_control: FlowControl::None,
             parity: Parity::None,
@@ -47,9 +47,9 @@ impl LoraSer {
         let readport = serialport::open_with_settings(&portname, &settings)?;
         let writeport = readport.try_clone()?;
         
-        Ok(LoraSer {br: Arc::new(Mutex::new(BufReader::new(readport))),
+        Ok(XBSer {br: Arc::new(Mutex::new(BufReader::new(readport))),
                     swrite: Arc::new(Mutex::new(writeport)),
-                    portname: portname})
+                    portname})
     }
 
     /// Read a line from the port.  Return it with EOL characters removed.
