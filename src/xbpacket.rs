@@ -95,6 +95,7 @@ impl XBTXRequest {
             fullframe.put_u16(lenu16);
             fullframe.put_slice(self.innerframe);
             fullframe.put_u8(xbchecksum(self.innerframe));
+            Ok(fullframe.freeze())
         } else {
             Err(TXGenError::InvalidLen)
         }
@@ -106,3 +107,33 @@ pub fn xbchecksum(data: &[u8]) -> u8 {
     let sumu64 = data.into_iter().map(|x| u64::from(x)).sum();
     0xffu8 - (sumu64 as u8)
 }
+
+/** Return a 48-bit MAC given the 64-bit MAC.  Truncates the most significant bits.
+
+# Example
+
+```
+use xbnet::xbpacket::*;
+
+let mac64 = 0x123456789abcdeffu64;
+let mac48 = mac64to48(mac64);
+assert_eq!([0x56, 0x78, 0x9a, 0xbc, 0xde, 0xff], mac48);
+assert_eq(mac64, mac48to64(mac48, mac64));
+```
+*/
+pub fn mac64to48(mac64: u64) -> [u8; 6] {
+    let macbytes = mac64.to_be_bytes;
+    macbytes[2..]
+}
+
+/** Return a 64-bit MAC given a pattern 64-bit MAC and a 48-bit MAC. The 16 most
+significant bits from the pattern will be used to complete the 48-bit MAC to 64-bit.
+*/
+pub fn mac48to64(mac48: &[u8; 6], pattern64: u64) -> u64 {
+    let mut mac64bytes = [0u8; 8];
+    mac64bytes[2..] = mac48;
+    let mut mac64 = u64::from_be_bytes(mac64bytes);
+    mac64 |= pattern64 & 0xffff000000000000;
+    mac64
+}
+

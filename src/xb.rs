@@ -27,6 +27,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use format_escape_default::format_escape_default;
 use std::path::PathBuf;
+use bytes::Bytes;
 
 pub fn mkerror(msg: &str) -> Error {
     Error::new(ErrorKind::Other, msg)
@@ -42,59 +43,14 @@ pub struct ReceivedFrames(pub Vec<u8>, pub Option<(String, String)>);
 pub struct XB {
     ser: XBSer,
 
-    // Lines coming from the radio
-    readerlinesrx: crossbeam_channel::Receiver<String>,
+    /// My 64-bit MAC address
+    mymac: u64,
 
-    // Frames going to the app
-    readeroutput: crossbeam_channel::Sender<ReceivedFrames>,
+    /// Frames to transmit
+    writerrx: crossbeam_channel::Receiver<Bytes>,
 
-    // Blocks to transmit
-    txblockstx: crossbeam_channel::Sender<Vec<u8>>,
-    txblocksrx: crossbeam_channel::Receiver<Vec<u8>>,
-
-    // Whether or not to read quality data from the radio
-    readqual: bool,
-
-    // The wait before transmitting.  Initialized from
-    // [`txwait`].
-    txwait: Duration,
-    
-    // The transmit prevention timeout.  Initialized from
-    // [`eotwait`].
-    eotwait: Duration,
-
-    // The maximum transmit time.
-    txslot: Option<Duration>,
-
-    // Extra data, to send before the next frame.
-    extradata: Vec<u8>,
-
-    // Maximum packet size
+    /// Maximum packet size
     maxpacketsize: usize,
-
-    // Whether or not to always try to cram as much as possible into each TX frame
-    pack: bool,
-
-    // Whether we must delay before transmit.  The Instant
-    // reflects the moment when the delay should end.
-    txdelay: Option<Instant>,
-
-    // When the current TX slot ends, if any.
-    txslotend: Option<Instant>,
-}
-
-/// Reads the lines from the radio and sends them down the channel to
-/// the processing bits.
-fn readerlinesthread(mut ser: XBSer, tx: crossbeam_channel::Sender<String>) {
-    loop {
-        let line = ser.readln().expect("Error reading line");
-        if let Some(l) = line {
-            tx.send(l).unwrap();
-        } else {
-            debug!("{:?}: EOF", ser.portname);
-            return;
-        }
-    }
 }
 
 /// Assert that a given response didn't indicate an EOF, and that it
@@ -110,53 +66,74 @@ pub fn assert_response(resp: String, expected: String) -> io::Result<()> {
 }
 
 impl XB {
-    /// Creates a new XB.  Returns an instance to be used for sending,
-    /// as well as a separate receiver to be used in a separate thread to handle
-    /// incoming frames.  The bool specifies whether or not to read the quality
-    /// parameters after a read.
-    pub fn new(ser: XBSer) -> (XB, crossbeam_channel::Receiver<ReceivedFrames>) {
+    /** Creates a new XB.  Returns an instance to be used for reading,
+    as well as a separate sender to be used in a separate thread to handle
+    outgoing frames.  This will spawn a thread to handle the writing to XBee.
+
+    If initfile is given, its lines will be sent to the radio, one at a time,
+    expecting OK after each one, to initialize it.
+
+    May panic if an error occurs during initialization.
+    */
+    pub fn new(ser: XBSer, initfile: Option<PathBuf>) -> (XB, crossbeam_channel::Sender<Bytes>) {
+        // FIXME: make this maximum of 5 configurable
+        let (writertx, writerrx) = crossbeam_channel::bounded(5);
 
         debug!("Configuring radio");
         thread::sleep(Duration::from_msecs(1100));
-        ser.swrite.lock().unwrap().write_all(b"+++")?;
+        ser.swrite.lock().unwrap().write_all(b"+++").unwrap();
         ser.swrite.lock().unwrap().flush();
 
-        assert_response(ser.readln()?, "OK");
+        assert_response(ser.readln().unwrap(), "OK");
+
+        if let Some(file) = initfile {
+            let f = fs::File::open(file).unwrap();
+            let reader = BufReader::new(f);
+            for line in reader.lines() {
+                if line.len() > 0 {
+                    self.ser.writeln(line).unwrap();
+                    assert_response(ser.readln().unwrap(), "OK")
+                }
+            }
+        }
 
         // Enter API mode
-        ser.writeln("ATAP 1")?;
-        assert_response(ser.readln()?, "OK");
+        ser.writeln("ATAP 1").unwrap();
+        assert_response(ser.readln().unwrap, "OK");
 
         // Standard API output mode
-        ser.writeln("ATAO 0")?;
-        assert_response(ser.readln()?, "OK");
+        ser.writeln("ATAO 0").unwrap();
+        assert_response(ser.readln().unwrap(), "OK");
 
         // Get our own MAC address
-        ser.writeln("ATSH")?;
-        let serialhigh = ser.readln()?;
+        ser.writeln("ATSH").unwrap();
+        let serialhigh = ser.readln().unwrap();
+        let serialhighu64 = u64::from(u32::from_be_bytes(hex::decode(serialhigh).unwrap()));
 
-        ser.writeln("ATSL")?;
-        let seriallow = ser.readln()?;
+        ser.writeln("ATSL").unwrap();
+        let seriallow = ser.readln().unwrap();
+        let seriallowu64 = u64::from(u32::from_be_bytes(hex::decode(seriallow).unwrap()));
+
+        let mymac = serialhighu64 << 32 | seriallowu64;
 
         // Get maximum packet size
-        ser.writeln("ATNP")?;
-        let maxpacket = ser.readln()?;
+        ser.writeln("ATNP").unwrap();
+        let maxpacket = ser.readln().unwrap();
+        let maxpacketsize = usize::from(u16::from_be_bytes(hex::decode(maxpacket).unwrap()));
+
 
         // Exit command mode
-        ser.writeln("ATCN")?;
-        assert_response(ser.readln()?, "OK");
+        ser.writeln("ATCN").unwrap();
+        assert_response(ser.readln().unwrap(), "OK");
 
         let ser2 = ser.clone();
         
-        (XB { readqual, ser, readeroutput, readerlinesrx, txblockstx, txblocksrx, maxpacketsize, pack,
-                    txdelay: None,
-                    txwait: Duration::from_millis(txwait),
-                    eotwait: Duration::from_millis(eotwait),
-                    txslot: if txslot > 0 {
-                        Some(Duration::from_millis(txslot))
-                    } else { None },
-                    txslotend: None,
-                    extradata: vec![]}, readeroutputreader)
+        (XB {
+            ser,
+            mymac,
+            maxpacketsize,
+            writerrx,
+        }, writertx)
     }
 
     pub fn mainloop(&mut self) -> io::Result<()> {
