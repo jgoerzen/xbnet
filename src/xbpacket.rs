@@ -18,6 +18,7 @@
 */
 
 use bytes::*;
+use std::convert::{TryInto, TryFrom};
 
 /** XBee transmissions can give either a 64-bit or a 16-bit destination
 address.  This permits the user to select one. */
@@ -40,7 +41,7 @@ pub enum TXGenError {
 
 /** A Digi 64-bit transmit request, frame type 0x10 */
 #[derive(Eq, PartialEq, Debug)]
-pub struct XBTXRequest<'a> {
+pub struct XBTXRequest {
     /// The frame ID, which will be returned in the subsequent response frame.
     /// Set to 0 to disable a response for this transmission.
     pub frame_id: u8,
@@ -55,10 +56,10 @@ pub struct XBTXRequest<'a> {
     pub transmit_options: u8,
 
     /// The payload
-    pub payload: &'a [u8],
+    pub payload: Bytes,
 }
 
-impl<'a> XBTXRequest<'a> {
+impl XBTXRequest {
     pub fn serialize(&self) -> Result<Bytes, TXGenError> {
         if self.payload.is_empty() {
             return Err(TXGenError::InvalidLen);
@@ -93,8 +94,8 @@ impl<'a> XBTXRequest<'a> {
         // That's it for the inner frame.  Now fill in the outer frame.
         if let Some(lenu16) = u16::try_from(self.payload.len()) {
             fullframe.put_u16(lenu16);
-            fullframe.put_slice(self.innerframe);
-            fullframe.put_u8(xbchecksum(self.innerframe));
+            fullframe.put_slice(&innerframe);
+            fullframe.put_u8(xbchecksum(&innerframe));
             Ok(fullframe.freeze())
         } else {
             Err(TXGenError::InvalidLen)
@@ -122,8 +123,8 @@ assert_eq(mac64, mac48to64(mac48, mac64));
 ```
 */
 pub fn mac64to48(mac64: u64) -> [u8; 6] {
-    let macbytes = mac64.to_be_bytes;
-    macbytes[2..]
+    let macbytes = mac64.to_be_bytes();
+    macbytes[2..].try_into().unwrap()
 }
 
 /** Return a 64-bit MAC given a pattern 64-bit MAC and a 48-bit MAC. The 16 most
@@ -131,7 +132,7 @@ significant bits from the pattern will be used to complete the 48-bit MAC to 64-
 */
 pub fn mac48to64(mac48: &[u8; 6], pattern64: u64) -> u64 {
     let mut mac64bytes = [0u8; 8];
-    mac64bytes[2..] = mac48;
+    mac64bytes[2..].copy_from_slice(mac48);
     let mut mac64 = u64::from_be_bytes(mac64bytes);
     mac64 |= pattern64 & 0xffff000000000000;
     mac64
@@ -144,21 +145,21 @@ for the block.  When zero, the receiver should process the accumulated data. */
 pub fn packetize_data(maxpacketsize: usize, dest: XBDestAddr, data: &[u8]) -> Result<Vec<XBTXRequest>, String> {
     let mut retval = Vec::new();
     if data.is_empty() {
-        return retval;
+        return Ok(retval);
     }
 
     let chunks: Vec<&[u8]> = data.chunks(maxpacketsize - 1).collect();
     let mut chunks_remaining: u8 = u8::try_from(chunks.len() - 1).map_err(|e| String::from("More than 255 chunks to transmit"))?;
     for chunk in chunks {
-        let mut payload = Bytes::new();
-        payload.push_u8(chunks_remaining);
-        payload.push_slice(chunk);
+        let mut payload = BytesMut::new();
+        payload.put_u8(chunks_remaining);
+        payload.put_slice(chunk);
         let packet = XBTXRequest{
             frame_id: 0,
             dest_addr: dest,
             broadcast_radius: 0,
             transmit_options: 0,
-            payload
+            payload: Bytes::from(payload)
         };
 
         retval.push(packet);
@@ -174,7 +175,7 @@ pub fn packetize_data(maxpacketsize: usize, dest: XBDestAddr, data: &[u8]) -> Re
 // RX side
 
 /** A Digi receive packet, 0x90 */
-#[derive(PartialEq, Eq, Ord, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub struct RXPacket {
     sender_addr64: u64,
     sender_addr16: u16,
