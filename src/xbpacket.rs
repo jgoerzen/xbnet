@@ -19,10 +19,11 @@
 
 use bytes::*;
 use std::convert::{TryInto, TryFrom};
+use std::fmt;
 
 /** XBee transmissions can give either a 64-bit or a 16-bit destination
 address.  This permits the user to select one. */
-#[derive(Eq, PartialEq, Debug, Clone)]
+#[derive(Eq, PartialEq, Clone)]
 pub enum XBDestAddr {
     /// A 16-bit destination address.  When a 64-bit address is given, this is transmitted as 0xFFFE.
     U16(u16),
@@ -30,6 +31,23 @@ pub enum XBDestAddr {
     /// The 64-bit destination address.  0xFFFF for broadcast.
     /// When a 16-bit destination is given, this will be transmitted as 0xFFFFFFFFFFFFFFFF.
     U64(u64)
+}
+
+impl fmt::Debug for XBDestAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            XBDestAddr::U16(x) => {
+                f.write_str("U16(")?;
+                f.write_str(&hex::encode(x.to_be_bytes()))?;
+                f.write_str(")")
+            },
+            XBDestAddr::U64(x) => {
+                f.write_str("U64(")?;
+                f.write_str(&hex::encode(x.to_be_bytes()))?;
+                f.write_str(")")
+            },
+        }
+    }
 }
 
 /** Possible errors from serialization */
