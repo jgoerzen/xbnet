@@ -70,7 +70,7 @@ impl XBSer {
     }
 
     /// Transmits a command with terminating EOL characters
-    pub fn writeln(&mut self, mut data: &str) -> io::Result<()> {
+    pub fn writeln(&mut self, data: &str) -> io::Result<()> {
         trace!("{:?} SEROUT: {}", self.portname, data);
         let mut data = BytesMut::from(data.as_bytes());
         data.put(&b"\r\n"[..]);

@@ -86,7 +86,7 @@ impl XB {
 
         trace!("Waiting for OK");
 
-        assert_response(ser.readln().unwrap().unwrap(), String::from("OK"));
+        assert_eq!(ser.readln().unwrap().unwrap(), String::from("OK"));
 
         if let Some(file) = initfile {
             let f = fs::File::open(file).unwrap();
@@ -95,18 +95,18 @@ impl XB {
                 let line = line.unwrap();
                 if line.len() > 0 {
                     ser.writeln(&line).unwrap();
-                    assert_response(ser.readln().unwrap().unwrap(), String::from("OK"));
+                    assert_eq!(ser.readln().unwrap().unwrap(), String::from("OK"));
                 }
             }
         }
 
         // Enter API mode
         ser.writeln("ATAP 1").unwrap();
-        assert_response(ser.readln().unwrap().unwrap(), String::from("OK"));
+        assert_eq!(ser.readln().unwrap().unwrap(), String::from("OK"));
 
         // Standard API output mode
         ser.writeln("ATAO 0").unwrap();
-        assert_response(ser.readln().unwrap().unwrap(), String::from("OK"));
+        assert_eq!(ser.readln().unwrap().unwrap(), String::from("OK"));
 
         // Get our own MAC address
         ser.writeln("ATSH").unwrap();
@@ -127,7 +127,7 @@ impl XB {
 
         // Exit command mode
         ser.writeln("ATCN").unwrap();
-        assert_response(ser.readln().unwrap().unwrap(), String::from("OK"));
+        assert_eq!(ser.readln().unwrap().unwrap(), String::from("OK"));
 
         let ser2 = ser.clone();
         thread::spawn(move || writerthread(ser2, maxpacketsize, writerrx));

@@ -32,19 +32,27 @@ pub fn genpings(dest: u64, sender: crossbeam_channel::Sender<(XBDestAddr, Bytes)
     loop {
         let sendstr = format!("Ping {}", counter);
         println!("SEND: {}", sendstr);
-        sender.send((XBDestAddr::U64(dest), Bytes::from(sendstr)));
+        sender.send((XBDestAddr::U64(dest), Bytes::from(sendstr))).unwrap();
         thread::sleep(Duration::from_secs(INTERVAL));
         counter += 1;
+    }
+}
+
+/// Show pongs
+pub fn displaypongs(xbreframer: &mut XBReframer, ser: &XBSer) -> () {
+    loop {
+        let (fromu64, _fromu16, payload) = xbreframer.rxframe(ser);
+        println!("RECV from {}: {}", hex::encode(fromu64.to_be_bytes()), String::from_utf8_lossy(&payload));
     }
 }
 
 /// Reply to pings
 pub fn pong(xbreframer: &mut XBReframer, ser: &XBSer, sender: crossbeam_channel::Sender<(XBDestAddr, Bytes)>) -> io::Result<()> {
     loop {
-        let (addr_64, addr_16, payload) = xbreframer.rxframe(ser);
+        let (addr_64, _addr_16, payload) = xbreframer.rxframe(ser);
         if payload.starts_with(b"Ping ") {
             let resp = Bytes::from(format!("Pong {}", String::from_utf8_lossy(&payload[5..])));
-            sender.send((XBDestAddr::U64(addr_64), resp));
+            sender.send((XBDestAddr::U64(addr_64), resp)).unwrap();
         }
     }
 }

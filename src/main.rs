@@ -73,7 +73,7 @@ fn main() {
     info!("lora starting");
 
     let xbser = ser::XBSer::new(opt.port).expect("Failed to initialize serial port");
-    let (mut xb, xbeesender) = xb::XB::new(xbser, opt.initfile);
+    let (xb, xbeesender) = xb::XB::new(xbser, opt.initfile);
     let mut xbreframer = xbrx::XBReframer::new();
 
 
@@ -81,7 +81,7 @@ fn main() {
         Command::Ping{dest} => {
             let dest_u64:u64 = u64::from_str_radix(&dest, 16).expect("Invalid destination");
             thread::spawn(move || ping::genpings(dest_u64, xbeesender).expect("Failure in genpings"));
-            xbreframer.discardframes(&xb.ser);
+            ping::displaypongs(&mut xbreframer, &xb.ser);
         },
         Command::Pong => {
             ping::pong(&mut xbreframer, &xb.ser, xbeesender).expect("Failure in loratostdout");
