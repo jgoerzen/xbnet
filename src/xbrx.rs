@@ -21,15 +21,8 @@
 use crate::ser::*;
 use crate::xbpacket::*;
 use log::*;
-use std::fs;
-use std::io::{BufRead, BufReader, Error, ErrorKind, Read};
-use std::io;
-use crossbeam_channel;
+use std::io::{Read};
 use hex;
-use std::thread;
-use std::time::{Duration, Instant};
-use format_escape_default::format_escape_default;
-use std::path::PathBuf;
 use bytes::*;
 use std::collections::HashMap;
 

@@ -24,13 +24,10 @@ use std::io;
 use crossbeam_channel;
 use hex;
 use std::thread;
-use std::time::{Duration, Instant};
-use format_escape_default::format_escape_default;
+use std::time::{Duration};
 use std::path::PathBuf;
 use bytes::Bytes;
-use std::convert::TryInto;
 use crate::xbpacket::*;
-use serialport::prelude::*;
 
 pub fn mkerror(msg: &str) -> Error {
     Error::new(ErrorKind::Other, msg)

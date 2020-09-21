@@ -30,7 +30,6 @@ mod ping;
 
 use std::path::PathBuf;
 use structopt::StructOpt;
-use std::convert::TryInto;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "xbnet", about = "Networking for XBee Radios", author = "John Goerzen <jgoerzen@complete.org>")]
@@ -98,7 +97,7 @@ fn main() {
             thread::spawn(move || pipe::stdout_processor(&mut xbreframer, &mut xb.ser_reader).expect("Failure in stdout_processor"));
             pipe::stdin_processor(dest_u64, 1600, xbeesender).expect("Failure in stdin_processor");
             // Make sure queued up data is sent
-            writerthread.join();
+            let _ = writerthread.join();
 
         },
     }

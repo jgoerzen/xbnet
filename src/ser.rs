@@ -20,7 +20,6 @@ use std::io;
 use serialport::prelude::*;
 use std::io::{BufReader, BufRead, Write};
 use log::*;
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::path::PathBuf;
 use bytes::*;

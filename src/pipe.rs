@@ -22,11 +22,7 @@ use crate::xbpacket::*;
 use crate::ser::*;
 use crate::xbrx::*;
 use crossbeam_channel;
-use std::thread;
-use std::time::Duration;
 use bytes::*;
-
-const INTERVAL: u64 = 5;
 
 pub fn stdin_processor(dest: u64, maxframesize: usize,
                        sender: crossbeam_channel::Sender<XBTX>) -> io::Result<()> {
