@@ -79,8 +79,8 @@ fn main() {
     }
     info!("xbnet starting");
 
-    let xbser = ser::XBSer::new(opt.port).expect("Failed to initialize serial port");
-    let (xb, xbeesender, writerthread) = xb::XB::new(xbser, opt.initfile);
+    let (ser_reader, ser_writer) = ser::new(opt.port).expect("Failed to initialize serial port");
+    let (mut xb, xbeesender, writerthread) = xb::XB::new(ser_reader, ser_writer, opt.initfile);
     let mut xbreframer = xbrx::XBReframer::new();
 
 
@@ -88,14 +88,14 @@ fn main() {
         Command::Ping{dest} => {
             let dest_u64:u64 = u64::from_str_radix(&dest, 16).expect("Invalid destination");
             thread::spawn(move || ping::genpings(dest_u64, xbeesender).expect("Failure in genpings"));
-            ping::displaypongs(&mut xbreframer, &xb.ser);
+            ping::displaypongs(&mut xbreframer, &mut xb.ser_reader);
         },
         Command::Pong => {
-            ping::pong(&mut xbreframer, &xb.ser, xbeesender).expect("Failure in pong");
+            ping::pong(&mut xbreframer, &mut xb.ser_reader, xbeesender).expect("Failure in pong");
         },
         Command::Pipe{dest} => {
             let dest_u64:u64 = u64::from_str_radix(&dest, 16).expect("Invalid destination");
-            thread::spawn(move || pipe::stdout_processor(&mut xbreframer, &xb.ser).expect("Failure in stdout_processor"));
+            thread::spawn(move || pipe::stdout_processor(&mut xbreframer, &mut xb.ser_reader).expect("Failure in stdout_processor"));
             pipe::stdin_processor(dest_u64, 1600, xbeesender).expect("Failure in stdin_processor");
             // Make sure queued up data is sent
             writerthread.join();

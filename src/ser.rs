@@ -25,18 +25,19 @@ use std::time::Duration;
 use std::path::PathBuf;
 use bytes::*;
 
-#[derive(Clone)]
-pub struct XBSer {
-    // BufReader can't be cloned.  Sigh.
-    pub br: Arc<Mutex<BufReader<Box<dyn SerialPort>>>>,
-    pub swrite: Arc<Mutex<Box<dyn SerialPort>>>,
-    pub portname: PathBuf
+pub struct XBSerReader {
+    pub br: BufReader<Box<dyn SerialPort>>,
+    pub portname: PathBuf,
+
 }
 
-impl XBSer {
+pub struct XBSerWriter {
+    pub swrite: Box<dyn SerialPort>,
+    pub portname: PathBuf,
+}
 
     /// Initialize the serial system, configuring the port.
-    pub fn new(portname: PathBuf) -> io::Result<XBSer> {
+    pub fn new(portname: PathBuf) -> io::Result<(XBSerReader, XBSerWriter)> {
         let settings = SerialPortSettings {
             baud_rate: 115200, // FIXME: make this configurable, default 9600
             data_bits: DataBits::Eight,
@@ -48,16 +49,17 @@ impl XBSer {
         let readport = serialport::open_with_settings(&portname, &settings)?;
         let writeport = readport.try_clone()?;
         
-        Ok(XBSer {br: Arc::new(Mutex::new(BufReader::new(readport))),
-                    swrite: Arc::new(Mutex::new(writeport)),
-                    portname})
+        Ok((
+            XBSerReader {br: BufReader::new(readport), portname: portname.clone()},
+            XBSerWriter {swrite: writeport, portname}))
     }
 
+impl XBSerReader {
     /// Read a line from the port.  Return it with EOL characters removed.
     /// None if EOF reached.
     pub fn readln(&mut self) -> io::Result<Option<String>> {
         let mut buf = Vec::new();
-        let size = self.br.lock().unwrap().read_until(0x0D, &mut buf)?;
+        let size = self.br.read_until(0x0D, &mut buf)?;
         let buf = String::from_utf8_lossy(&buf);
         if size == 0 {
             debug!("{:?}: Received EOF from serial port", self.portname); 
@@ -69,15 +71,17 @@ impl XBSer {
         }
     }
 
+}
+
+impl XBSerWriter {
     /// Transmits a command with terminating EOL characters
     pub fn writeln(&mut self, data: &str) -> io::Result<()> {
         trace!("{:?} SEROUT: {}", self.portname, data);
         let mut data = BytesMut::from(data.as_bytes());
         data.put(&b"\r\n"[..]);
         // Give the receiver a chance to process
-        // FIXME: lock this only once
-        self.swrite.lock().unwrap().write_all(&data)?;
-        self.swrite.lock().unwrap().flush()
+        self.swrite.write_all(&data)?;
+        self.swrite.flush()
     }
 }
 

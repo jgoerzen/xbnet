@@ -39,7 +39,7 @@ pub fn genpings(dest: u64, sender: crossbeam_channel::Sender<XBTX>) -> io::Resul
 }
 
 /// Show pongs
-pub fn displaypongs(xbreframer: &mut XBReframer, ser: &XBSer) -> () {
+pub fn displaypongs(xbreframer: &mut XBReframer, ser: &mut XBSerReader) -> () {
     loop {
         let (fromu64, _fromu16, payload) = xbreframer.rxframe(ser);
         println!("RECV from {}: {}", hex::encode(fromu64.to_be_bytes()), String::from_utf8_lossy(&payload));
@@ -47,7 +47,7 @@ pub fn displaypongs(xbreframer: &mut XBReframer, ser: &XBSer) -> () {
 }
 
 /// Reply to pings
-pub fn pong(xbreframer: &mut XBReframer, ser: &XBSer, sender: crossbeam_channel::Sender<XBTX>) -> io::Result<()> {
+pub fn pong(xbreframer: &mut XBReframer, ser: &mut XBSerReader, sender: crossbeam_channel::Sender<XBTX>) -> io::Result<()> {
     loop {
         let (fromu64, _addr_16, payload) = xbreframer.rxframe(ser);
         if payload.starts_with(b"Ping ") {

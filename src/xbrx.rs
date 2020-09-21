@@ -18,7 +18,7 @@
 
 */
 
-use crate::ser::XBSer;
+use crate::ser::*;
 use crate::xbpacket::*;
 use log::*;
 use std::fs;
@@ -35,12 +35,11 @@ use std::collections::HashMap;
 
 /** Attempts to read a packet from the port.  Returns
 None if it's not an RX frame, or if there is a checksum mismatch. */
-pub fn rxxbpacket(ser: &XBSer) -> Option<RXPacket> {
+pub fn rxxbpacket(ser: &mut XBSerReader) -> Option<RXPacket> {
     let mut junkbytes = BytesMut::new();
-    let mut serport = ser.br.lock().unwrap();
     loop {
         let mut startdelim = [0u8; 1];
-        serport.read_exact(&mut startdelim).unwrap();
+        ser.br.read_exact(&mut startdelim).unwrap();
         if startdelim[0] != 0x7e {
             if junkbytes.is_empty() {
                 error!("Receiving junk");
@@ -61,17 +60,17 @@ pub fn rxxbpacket(ser: &XBSer) -> Option<RXPacket> {
     // Read the length.
 
     let mut lenbytes = [0u8; 2];
-    serport.read_exact(&mut lenbytes).unwrap();
+    ser.br.read_exact(&mut lenbytes).unwrap();
     let length = usize::from(u16::from_be_bytes(lenbytes));
 
     // Now read the rest of the frame.
     let mut inner = vec![0u8; length];
 
-    serport.read_exact(&mut inner).unwrap();
+    ser.br.read_exact(&mut inner).unwrap();
 
     // And the checksum.
     let mut checksum = [0u8; 1];
-    serport.read_exact(&mut checksum).unwrap();
+    ser.br.read_exact(&mut checksum).unwrap();
 
     if xbchecksum(&inner) != checksum[0] {
         error!("SERIN: Checksum mismatch; data: {}", hex::encode(inner));
@@ -94,7 +93,7 @@ pub fn rxxbpacket(ser: &XBSer) -> Option<RXPacket> {
 }
 
 /// Like rxxbpacket, but wait until we have a valid packet.
-pub fn rxxbpacket_wait(ser: &XBSer) -> RXPacket {
+pub fn rxxbpacket_wait(ser: &mut XBSerReader) -> RXPacket {
     loop {
         if let Some(packet) = rxxbpacket(ser) {
             return packet;
@@ -117,7 +116,7 @@ impl XBReframer {
     }
 
     /// Receive a frame.  Indicate the sender (u64, u16) and payload.
-    pub fn rxframe(&mut self, ser: &XBSer) -> (u64, u16, Bytes) {
+    pub fn rxframe(&mut self, ser: &mut XBSerReader) -> (u64, u16, Bytes) {
         loop {
             let packet = rxxbpacket_wait(ser);
             let mut frame = BytesMut::new();
@@ -135,7 +134,7 @@ impl XBReframer {
         }
     }
 
-    pub fn discardframes(&mut self, ser: &XBSer) -> () {
+    pub fn discardframes(&mut self, ser: &mut XBSerReader) -> () {
         loop {
             let _ = self.rxframe(ser);
         }

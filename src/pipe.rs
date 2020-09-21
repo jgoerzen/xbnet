@@ -46,7 +46,7 @@ pub fn stdin_processor(dest: u64, maxframesize: usize,
     }
 }
 
-pub fn stdout_processor(xbreframer: &mut XBReframer, ser: &XBSer) -> io::Result<()> {
+pub fn stdout_processor(xbreframer: &mut XBReframer, ser: &mut XBSerReader) -> io::Result<()> {
     let mut stdout = io::stdout();
     loop {
         let (_fromu64, _fromu16, payload) = xbreframer.rxframe(ser);

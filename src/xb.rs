@@ -16,7 +16,7 @@
 
 */
 
-use crate::ser::XBSer;
+use crate::ser::*;
 use log::*;
 use std::fs;
 use std::io::{BufRead, BufReader, Error, ErrorKind};
@@ -30,6 +30,7 @@ use std::path::PathBuf;
 use bytes::Bytes;
 use std::convert::TryInto;
 use crate::xbpacket::*;
+use serialport::prelude::*;
 
 pub fn mkerror(msg: &str) -> Error {
     Error::new(ErrorKind::Other, msg)
@@ -45,7 +46,7 @@ pub enum XBTX {
 
 /// Main XBeeNet struct
 pub struct XB {
-    pub ser: XBSer,
+    pub ser_reader: XBSerReader,
 
     /// My 64-bit MAC address
     pub mymac: u64,
@@ -76,21 +77,21 @@ impl XB {
 
     May panic if an error occurs during initialization.
     */
-    pub fn new(mut ser: XBSer, initfile: Option<PathBuf>) -> (XB, crossbeam_channel::Sender<XBTX>, thread::JoinHandle<()>) {
+    pub fn new(mut ser_reader: XBSerReader, mut ser_writer: XBSerWriter, initfile: Option<PathBuf>) -> (XB, crossbeam_channel::Sender<XBTX>, thread::JoinHandle<()>) {
         // FIXME: make this maximum of 5 configurable
         let (writertx, writerrx) = crossbeam_channel::bounded(5);
 
         debug!("Configuring radio");
         thread::sleep(Duration::from_secs(2));
         trace!("Sending +++");
-        ser.swrite.lock().unwrap().write_all(b"+++").unwrap();
-        ser.swrite.lock().unwrap().flush().unwrap();
+        ser_writer.swrite.write_all(b"+++").unwrap();
+        ser_writer.swrite.flush().unwrap();
 
         loop {
             // There might be other packets flowing in while we wait for the OK.  FIXME: this could still find
             // it prematurely if OK\r occurs in a packet.
             trace!("Waiting for OK");
-            let line = ser.readln().unwrap().unwrap();
+            let line = ser_reader.readln().unwrap().unwrap();
             if line.ends_with("OK") {
                 trace!("Received OK");
                 break;
@@ -105,48 +106,47 @@ impl XB {
             for line in reader.lines() {
                 let line = line.unwrap();
                 if line.len() > 0 {
-                    ser.writeln(&line).unwrap();
-                    assert_eq!(ser.readln().unwrap().unwrap(), String::from("OK"));
+                    ser_writer.writeln(&line).unwrap();
+                    assert_eq!(ser_reader.readln().unwrap().unwrap(), String::from("OK"));
                 }
             }
         }
 
         // Enter API mode
-        ser.writeln("ATAP 1").unwrap();
-        assert_eq!(ser.readln().unwrap().unwrap(), String::from("OK"));
+        ser_writer.writeln("ATAP 1").unwrap();
+        assert_eq!(ser_reader.readln().unwrap().unwrap(), String::from("OK"));
 
         // Standard API output mode
-        ser.writeln("ATAO 0").unwrap();
-        assert_eq!(ser.readln().unwrap().unwrap(), String::from("OK"));
+        ser_writer.writeln("ATAO 0").unwrap();
+        assert_eq!(ser_reader.readln().unwrap().unwrap(), String::from("OK"));
 
         // Get our own MAC address
-        ser.writeln("ATSH").unwrap();
-        let serialhigh = ser.readln().unwrap().unwrap();
+        ser_writer.writeln("ATSH").unwrap();
+        let serialhigh = ser_reader.readln().unwrap().unwrap();
         let serialhighu64 = u64::from_str_radix(&serialhigh, 16).unwrap();
 
-        ser.writeln("ATSL").unwrap();
-        let seriallow = ser.readln().unwrap().unwrap();
+        ser_writer.writeln("ATSL").unwrap();
+        let seriallow = ser_reader.readln().unwrap().unwrap();
         let seriallowu64 = u64::from_str_radix(&seriallow, 16).unwrap();
 
         let mymac = serialhighu64 << 32 | seriallowu64;
 
         // Get maximum packet size
-        ser.writeln("ATNP").unwrap();
-        let maxpacket = ser.readln().unwrap().unwrap();
+        ser_writer.writeln("ATNP").unwrap();
+        let maxpacket = ser_reader.readln().unwrap().unwrap();
         let maxpacketsize = usize::from(u16::from_str_radix(&maxpacket, 16).unwrap());
 
 
         // Exit command mode
-        ser.writeln("ATCN").unwrap();
-        assert_eq!(ser.readln().unwrap().unwrap(), String::from("OK"));
+        ser_writer.writeln("ATCN").unwrap();
+        assert_eq!(ser_reader.readln().unwrap().unwrap(), String::from("OK"));
 
         debug!("Radio configuration complete");
 
-        let ser2 = ser.clone();
-        let writerthread = thread::spawn(move || writerthread(ser2, maxpacketsize, writerrx));
+        let writerthread = thread::spawn(move || writerthread(ser_writer, maxpacketsize, writerrx));
         
         (XB {
-            ser,
+            ser_reader,
             mymac,
             maxpacketsize,
         }, writertx, writerthread)
@@ -154,7 +154,7 @@ impl XB {
 
 }
 
-fn writerthread(ser: XBSer, maxpacketsize: usize,
+fn writerthread(mut ser: XBSerWriter, maxpacketsize: usize,
                 writerrx: crossbeam_channel::Receiver<XBTX>) {
     for item in writerrx.iter() {
         match item {
@@ -165,13 +165,12 @@ fn writerthread(ser: XBSer, maxpacketsize: usize,
 
         match packetize_data(maxpacketsize, &dest, &data) {
             Ok(packets) => {
-                let mut serport = ser.swrite.lock().unwrap();
                 for packet in packets.into_iter() {
                     match packet.serialize() {
                         Ok(datatowrite) => {
                             trace!("TX to {:?} data {}", &dest, hex::encode(&datatowrite));
-                            serport.write_all(&datatowrite).unwrap();
-                            serport.flush().unwrap();
+                            ser.swrite.write_all(&datatowrite).unwrap();
+                            ser.swrite.flush().unwrap();
                         },
                         Err(e) => {
                             error!("Serialization error: {:?}", e);
