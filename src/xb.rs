@@ -44,7 +44,6 @@ pub enum XBTX {
 }
 
 /// Main XBeeNet struct
-#[derive(Clone)]
 pub struct XB {
     pub ser: XBSer,
 
@@ -70,14 +69,14 @@ pub fn assert_response(resp: String, expected: String) -> io::Result<()> {
 impl XB {
     /** Creates a new XB.  Returns an instance to be used for reading,
     as well as a separate sender to be used in a separate thread to handle
-    outgoing frames.  This will spawn a thread to handle the writing to XBee.
+    outgoing frames.  This will spawn a thread to handle the writing to XBee, which is returned.
 
     If initfile is given, its lines will be sent to the radio, one at a time,
     expecting OK after each one, to initialize it.
 
     May panic if an error occurs during initialization.
     */
-    pub fn new(mut ser: XBSer, initfile: Option<PathBuf>) -> (XB, crossbeam_channel::Sender<XBTX>) {
+    pub fn new(mut ser: XBSer, initfile: Option<PathBuf>) -> (XB, crossbeam_channel::Sender<XBTX>, thread::JoinHandle<()>) {
         // FIXME: make this maximum of 5 configurable
         let (writertx, writerrx) = crossbeam_channel::bounded(5);
 
@@ -144,14 +143,15 @@ impl XB {
         debug!("Radio configuration complete");
 
         let ser2 = ser.clone();
-        thread::spawn(move || writerthread(ser2, maxpacketsize, writerrx));
+        let writerthread = thread::spawn(move || writerthread(ser2, maxpacketsize, writerrx));
         
         (XB {
             ser,
             mymac,
             maxpacketsize,
-        }, writertx)
+        }, writertx, writerthread)
     }
+
 }
 
 fn writerthread(ser: XBSer, maxpacketsize: usize,

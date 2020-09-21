@@ -80,7 +80,7 @@ fn main() {
     info!("xbnet starting");
 
     let xbser = ser::XBSer::new(opt.port).expect("Failed to initialize serial port");
-    let (xb, xbeesender) = xb::XB::new(xbser, opt.initfile);
+    let (xb, xbeesender, writerthread) = xb::XB::new(xbser, opt.initfile);
     let mut xbreframer = xbrx::XBReframer::new();
 
 
@@ -95,8 +95,11 @@ fn main() {
         },
         Command::Pipe{dest} => {
             let dest_u64:u64 = u64::from_str_radix(&dest, 16).expect("Invalid destination");
-            thread::spawn(move || pipe::stdin_processor(dest_u64, 1600, xbeesender).expect("Failure in stdin_processor"));
-            pipe::stdout_processor(&mut xbreframer, &xb.ser).expect("Failure in stdout_processor");
+            thread::spawn(move || pipe::stdout_processor(&mut xbreframer, &xb.ser).expect("Failure in stdout_processor"));
+            pipe::stdin_processor(dest_u64, 1600, xbeesender).expect("Failure in stdin_processor");
+            // Make sure queued up data is sent
+            writerthread.join();
+
         },
     }
 }
