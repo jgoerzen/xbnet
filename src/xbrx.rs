@@ -83,14 +83,8 @@ pub fn rxxbpacket(ser: &mut XBSerReader) -> Option<RXPacket> {
             let tx_retry_count = inner.get_u8();
             let delivery_status = inner.get_u8();
             let discovery_status = inner.get_u8();
-            let txstatus = ExtTxStatus {
-                frame_id,
-                dest_addr_16,
-                tx_retry_count,
-                delivery_status,
-                discovery_status,
-            };
-            trace!("TX STATUS: {:?}", txstatus);
+            trace!("TX STATUS: frame_id: {:X}, dest_addr_16: {:X}, tx_retry_count: {:X}, delivery_status: {:X}, discovery_status: {:X}",
+                   frame_id, dest_addr_16, tx_retry_count, delivery_status, discovery_status);
             None
         }
         0x90 => {

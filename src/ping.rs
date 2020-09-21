@@ -25,7 +25,7 @@ use std::io;
 use std::thread;
 use std::time::Duration;
 
-const INTERVAL: u64 = 5;
+const INTERVAL: u64 = 5; // FIXME: this should be configurable
 
 pub fn genpings(dest: u64, sender: crossbeam_channel::Sender<XBTX>) -> io::Result<()> {
     let mut counter: u64 = 1;

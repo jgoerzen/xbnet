@@ -198,12 +198,12 @@ impl PacketStream {
             let mut payload = BytesMut::new();
             payload.put_u8(chunks_remaining);
             payload.put_slice(chunk);
-            let frame_id = self.get_and_incr_framecounter();
+            let frame_id = self.get_and_incr_framecounter(); // FIXME: make this configurable whether we get back TX reports.
             let packet = XBTXRequest {
                 frame_id,
                 dest_addr: dest.clone(),
                 broadcast_radius: 0,
-                transmit_options: 0,
+                transmit_options: 0x01, // FIXME: make this configurable whether or not to request ACKs (0x01 disables; 0x00 default)
                 payload: Bytes::from(payload),
             };
 

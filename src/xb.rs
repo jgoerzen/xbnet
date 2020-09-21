@@ -179,7 +179,7 @@ fn writerthread(
                             match packet.serialize() {
                                 Ok(datatowrite) => {
                                     trace!(
-                                        "TX ID {} to {:?} data {}",
+                                        "TX ID {:X} to {:?} data {}",
                                         packet.frame_id,
                                         &dest,
                                         hex::encode(&datatowrite)
