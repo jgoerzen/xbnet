@@ -108,18 +108,18 @@ impl XB {
         // Get our own MAC address
         ser.writeln("ATSH").unwrap();
         let serialhigh = ser.readln().unwrap().unwrap();
-        let serialhighu64 = u64::from(u32::from_be_bytes(hex::decode(serialhigh).unwrap().as_slice().try_into().unwrap()));
+        let serialhighu64 = u64::from_str_radix(&serialhigh, 16).unwrap();
 
         ser.writeln("ATSL").unwrap();
         let seriallow = ser.readln().unwrap().unwrap();
-        let seriallowu64 = u64::from(u32::from_be_bytes(hex::decode(seriallow).unwrap().as_slice().try_into().unwrap()));
+        let seriallowu64 = u64::from_str_radix(&seriallow, 16).unwrap();
 
         let mymac = serialhighu64 << 32 | seriallowu64;
 
         // Get maximum packet size
         ser.writeln("ATNP").unwrap();
         let maxpacket = ser.readln().unwrap().unwrap();
-        let maxpacketsize = usize::from(u16::from_be_bytes(hex::decode(maxpacket).unwrap().as_slice().try_into().unwrap()));
+        let maxpacketsize = usize::from(u16::from_str_radix(&maxpacket, 16).unwrap());
 
 
         // Exit command mode

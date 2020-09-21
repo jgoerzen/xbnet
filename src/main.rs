@@ -79,7 +79,7 @@ fn main() {
 
     match opt.cmd {
         Command::Ping{dest} => {
-            let dest_u64 = u64::from_be_bytes(hex::decode(dest).unwrap().as_slice().try_into().unwrap());
+            let dest_u64:u64 = u64::from_str_radix(&dest, 16).expect("Invalid destination");
             thread::spawn(move || ping::genpings(dest_u64, xbeesender).expect("Failure in genpings"));
             xbreframer.discardframes(&xb.ser);
         },
