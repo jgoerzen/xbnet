@@ -28,6 +28,7 @@ use std::time::{Duration, Instant};
 use format_escape_default::format_escape_default;
 use std::path::PathBuf;
 use bytes::Bytes;
+use std::convert::TryInto;
 
 pub fn mkerror(msg: &str) -> Error {
     Error::new(ErrorKind::Other, msg)
@@ -77,51 +78,51 @@ impl XB {
         let (writertx, writerrx) = crossbeam_channel::bounded(5);
 
         debug!("Configuring radio");
-        thread::sleep(Duration::from_msecs(1100));
+        thread::sleep(Duration::from_secs(2));
         ser.swrite.lock().unwrap().write_all(b"+++").unwrap();
         ser.swrite.lock().unwrap().flush();
 
-        assert_response(ser.readln().unwrap(), "OK");
+        assert_response(ser.readln().unwrap().unwrap(), String::from("OK"));
 
         if let Some(file) = initfile {
             let f = fs::File::open(file).unwrap();
             let reader = BufReader::new(f);
             for line in reader.lines() {
-                if line.len() > 0 {
-                    self.ser.writeln(line).unwrap();
-                    assert_response(ser.readln().unwrap(), "OK")
+                if line.unwrap().len() > 0 {
+                    self.ser.writeln(line.unwrap()).unwrap();
+                    assert_response(ser.readln().unwrap().unwrap(), String::from("OK"));
                 }
             }
         }
 
         // Enter API mode
         ser.writeln("ATAP 1").unwrap();
-        assert_response(ser.readln().unwrap, "OK");
+        assert_response(ser.readln().unwrap().unwrap(), String::from("OK"));
 
         // Standard API output mode
         ser.writeln("ATAO 0").unwrap();
-        assert_response(ser.readln().unwrap(), "OK");
+        assert_response(ser.readln().unwrap().unwrap(), String::from("OK"));
 
         // Get our own MAC address
         ser.writeln("ATSH").unwrap();
-        let serialhigh = ser.readln().unwrap();
-        let serialhighu64 = u64::from(u32::from_be_bytes(hex::decode(serialhigh).unwrap()));
+        let serialhigh = ser.readln().unwrap().unwrap();
+        let serialhighu64 = u64::from(u32::from_be_bytes(hex::decode(serialhigh).unwrap().as_slice().try_into().unwrap()));
 
         ser.writeln("ATSL").unwrap();
-        let seriallow = ser.readln().unwrap();
-        let seriallowu64 = u64::from(u32::from_be_bytes(hex::decode(seriallow).unwrap()));
+        let seriallow = ser.readln().unwrap().unwrap();
+        let seriallowu64 = u64::from(u32::from_be_bytes(hex::decode(seriallow).unwrap().as_slice().try_into().unwrap()));
 
         let mymac = serialhighu64 << 32 | seriallowu64;
 
         // Get maximum packet size
         ser.writeln("ATNP").unwrap();
-        let maxpacket = ser.readln().unwrap();
-        let maxpacketsize = usize::from(u16::from_be_bytes(hex::decode(maxpacket).unwrap()));
+        let maxpacket = ser.readln().unwrap().unwrap();
+        let maxpacketsize = usize::from(u16::from_be_bytes(hex::decode(maxpacket).unwrap().as_slice().try_into().unwrap()));
 
 
         // Exit command mode
         ser.writeln("ATCN").unwrap();
-        assert_response(ser.readln().unwrap(), "OK");
+        assert_response(ser.readln().unwrap().unwrap(), String::from("OK"));
 
         let ser2 = ser.clone();
         thread::spawn(move || writerthread(ser2, maxpacketsize, writerrx));
