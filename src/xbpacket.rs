@@ -22,7 +22,7 @@ use std::convert::{TryInto, TryFrom};
 
 /** XBee transmissions can give either a 64-bit or a 16-bit destination
 address.  This permits the user to select one. */
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub enum XBDestAddr {
     /// A 16-bit destination address.  When a 64-bit address is given, this is transmitted as 0xFFFE.
     U16(u16),
@@ -142,7 +142,7 @@ pub fn mac48to64(mac48: &[u8; 6], pattern64: u64) -> u64 {
 
 We create a leading byte that indicates how many more XBee packets are remaining
 for the block.  When zero, the receiver should process the accumulated data. */
-pub fn packetize_data(maxpacketsize: usize, dest: XBDestAddr, data: &[u8]) -> Result<Vec<XBTXRequest>, String> {
+pub fn packetize_data(maxpacketsize: usize, dest: &XBDestAddr, data: &[u8]) -> Result<Vec<XBTXRequest>, String> {
     let mut retval = Vec::new();
     if data.is_empty() {
         return Ok(retval);
@@ -156,7 +156,7 @@ pub fn packetize_data(maxpacketsize: usize, dest: XBDestAddr, data: &[u8]) -> Re
         payload.put_slice(chunk);
         let packet = XBTXRequest{
             frame_id: 0,
-            dest_addr: dest,
+            dest_addr: dest.clone(),
             broadcast_radius: 0,
             transmit_options: 0,
             payload: Bytes::from(payload)

@@ -32,7 +32,7 @@ pub fn genpings(dest: u64, sender: crossbeam_channel::Sender<(XBDestAddr, Bytes)
     loop {
         let sendstr = format!("Ping {}", counter);
         println!("SEND: {}", sendstr);
-        sender.send((XBDestAddr::U64(dest), Bytes::from(sendstr.as_bytes())));
+        sender.send((XBDestAddr::U64(dest), Bytes::from(sendstr)));
         thread::sleep(Duration::from_secs(INTERVAL));
         counter += 1;
     }
@@ -43,8 +43,8 @@ pub fn pong(xbreframer: &mut XBReframer, ser: &XBSer, sender: crossbeam_channel:
     loop {
         let (addr_64, addr_16, payload) = xbreframer.rxframe(ser);
         if payload.starts_with(b"Ping ") {
-            let resp = format!("Pong {}", String::from_utf8_lossy(&payload[5..]));
-            sender.send((XBDestAddr::U64(addr_64), Bytes::from(resp.as_bytes())));
+            let resp = Bytes::from(format!("Pong {}", String::from_utf8_lossy(&payload[5..])));
+            sender.send((XBDestAddr::U64(addr_64), resp));
         }
     }
 }

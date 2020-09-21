@@ -37,7 +37,7 @@ use std::collections::HashMap;
 None if it's not an RX frame, or if there is a checksum mismatch. */
 pub fn rxxbpacket(ser: &XBSer) -> Option<RXPacket> {
     let mut junkbytes = BytesMut::new();
-    let serport = *ser.br.lock().unwrap();
+    let mut serport = ser.br.lock().unwrap();
     loop {
         let mut startdelim = [0u8; 1];
         serport.read_exact(&mut startdelim).unwrap();
@@ -54,7 +54,7 @@ pub fn rxxbpacket(ser: &XBSer) -> Option<RXPacket> {
 
     // OK, got the start delimeter.  Log the junk, if any.
     if ! junkbytes.is_empty() {
-        error!("Found start delimeter after reading junk: {}", hex::encode(junkbytes));
+        error!("Found start delimeter after reading junk: {}", hex::encode(&junkbytes));
         junkbytes.clear();
     }
 
@@ -78,7 +78,7 @@ pub fn rxxbpacket(ser: &XBSer) -> Option<RXPacket> {
         return None;
     }
 
-    let inner = Bytes::from(inner);
+    let mut inner = Bytes::from(inner);
     let frametype = inner.get_u8();
     if frametype != 0x90 {
         debug!("SERIN: Non-0x90 frame; data: {}", hex::encode(inner));
@@ -89,7 +89,7 @@ pub fn rxxbpacket(ser: &XBSer) -> Option<RXPacket> {
     let sender_addr16 = inner.get_u16();
     let rx_options = inner.get_u8();
     let payload = inner.to_bytes();
-    trace!("SERIN: packet from {} / {}, payload {}", hex::encode(sender_addr64.to_be_bytes()), hex::encode(sender_addr16.to_be_bytes()), hex::encode(payload));
+    trace!("SERIN: packet from {} / {}, payload {}", hex::encode(sender_addr64.to_be_bytes()), hex::encode(sender_addr16.to_be_bytes()), hex::encode(&payload));
     Some(RXPacket {sender_addr64, sender_addr16, rx_options, payload})
 }
 
@@ -120,10 +120,9 @@ impl XBReframer {
     pub fn rxframe(&mut self, ser: &XBSer) -> (u64, u16, Bytes) {
         loop {
             let packet = rxxbpacket_wait(ser);
-            let mut frame = if let Some(olddata) = self.buf.get(&packet.sender_addr64) {
-                *olddata
-            } else {
-                BytesMut::new()
+            let mut frame = BytesMut::new();
+            if let Some(olddata) = self.buf.get(&packet.sender_addr64) {
+                frame.extend_from_slice(olddata);
             };
 
             frame.extend_from_slice(&packet.payload[1..]);

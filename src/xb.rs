@@ -74,7 +74,7 @@ impl XB {
 
     May panic if an error occurs during initialization.
     */
-    pub fn new(ser: XBSer, initfile: Option<PathBuf>) -> (XB, crossbeam_channel::Sender<(XBDestAddr, Bytes)>) {
+    pub fn new(mut ser: XBSer, initfile: Option<PathBuf>) -> (XB, crossbeam_channel::Sender<(XBDestAddr, Bytes)>) {
         // FIXME: make this maximum of 5 configurable
         let (writertx, writerrx) = crossbeam_channel::bounded(5);
 
@@ -89,8 +89,9 @@ impl XB {
             let f = fs::File::open(file).unwrap();
             let reader = BufReader::new(f);
             for line in reader.lines() {
-                if line.unwrap().len() > 0 {
-                    ser.writeln(&line.unwrap()).unwrap();
+                let line = line.unwrap();
+                if line.len() > 0 {
+                    ser.writeln(&line).unwrap();
                     assert_response(ser.readln().unwrap().unwrap(), String::from("OK"));
                 }
             }
@@ -142,13 +143,13 @@ fn writerthread(ser: XBSer, maxpacketsize: usize,
         // Here we receive a block of data, which hasn't been
         // packetized.  Packetize it and send out the result.
 
-        match packetize_data(maxpacketsize, dest, &data) {
+        match packetize_data(maxpacketsize, &dest, &data) {
             Ok(packets) => {
-                let serport = ser.swrite.lock().unwrap();
+                let mut serport = ser.swrite.lock().unwrap();
                 for packet in packets.into_iter() {
                     match packet.serialize() {
                         Ok(datatowrite) => {
-                            trace!("TX to {:?} data {}", dest, hex::encode(datatowrite));
+                            trace!("TX to {:?} data {}", &dest, hex::encode(&datatowrite));
                             serport.write_all(&datatowrite).unwrap();
                             serport.flush();
                         },
