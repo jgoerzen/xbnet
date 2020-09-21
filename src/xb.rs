@@ -29,6 +29,7 @@ use format_escape_default::format_escape_default;
 use std::path::PathBuf;
 use bytes::Bytes;
 use std::convert::TryInto;
+use crate::xbpacket::*;
 
 pub fn mkerror(msg: &str) -> Error {
     Error::new(ErrorKind::Other, msg)
@@ -42,13 +43,13 @@ pub struct ReceivedFrames(pub Vec<u8>, pub Option<(String, String)>);
 
 #[derive(Clone)]
 pub struct XB {
-    ser: XBSer,
+    pub ser: XBSer,
 
     /// My 64-bit MAC address
-    mymac: u64,
+    pub mymac: u64,
 
     /// Maximum packet size
-    maxpacketsize: usize,
+    pub maxpacketsize: usize,
 }
 
 /// Assert that a given response didn't indicate an EOF, and that it
@@ -89,7 +90,7 @@ impl XB {
             let reader = BufReader::new(f);
             for line in reader.lines() {
                 if line.unwrap().len() > 0 {
-                    self.ser.writeln(line.unwrap()).unwrap();
+                    ser.writeln(&line.unwrap()).unwrap();
                     assert_response(ser.readln().unwrap().unwrap(), String::from("OK"));
                 }
             }
@@ -141,14 +142,14 @@ fn writerthread(ser: XBSer, maxpacketsize: usize,
         // Here we receive a block of data, which hasn't been
         // packetized.  Packetize it and send out the result.
 
-        match packetize_data(maxpacketsize, dest, data) {
+        match packetize_data(maxpacketsize, dest, &data) {
             Ok(packets) => {
                 let serport = ser.swrite.lock().unwrap();
                 for packet in packets.into_iter() {
                     match packet.serialize() {
                         Ok(datatowrite) => {
                             trace!("TX to {:?} data {}", dest, hex::encode(datatowrite));
-                            serport.write_all(datatowrite).unwrap();
+                            serport.write_all(&datatowrite).unwrap();
                             serport.flush();
                         },
                         Err(e) => {

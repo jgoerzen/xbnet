@@ -87,7 +87,7 @@ pub fn rxxbpacket(ser: &XBSer) -> Option<RXPacket> {
 
     let sender_addr64 = inner.get_u64();
     let sender_addr16 = inner.get_u16();
-    let sender_rxoptions = inner.get_u8();
+    let rx_options = inner.get_u8();
     let payload = inner.to_bytes();
     trace!("SERIN: packet from {} / {}, payload {}", hex::encode(sender_addr64.to_be_bytes()), hex::encode(sender_addr16.to_be_bytes()), hex::encode(payload));
     Some(RXPacket {sender_addr64, sender_addr16, rx_options, payload})
