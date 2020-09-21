@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2019  John Goerzen <jgoerzen@complete.org
+    Copyright (C) 2019-2020  John Goerzen <jgoerzen@complete.org
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -16,7 +16,8 @@
 */
 
 use std::io;
-use crate::lorastik::{LoraStik, ReceivedFrames};
+use crate::xb::*;
+use crate::xbpacket::*;
 use crossbeam_channel;
 use std::thread;
 use std::time::Duration;

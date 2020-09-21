@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2019  John Goerzen <jgoerzen@complete.org
+    Copyright (C) 2019-2020 John Goerzen <jgoerzen@complete.org
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -22,16 +22,16 @@ use log::*;
 use std::thread;
 
 mod ser;
-mod lorastik;
+mod xb;
+mod xbpacket;
 mod pipe;
 mod ping;
-mod kiss;
 
 use std::path::PathBuf;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "lorapipe", about = "Tools for LoRa radios", author = "John Goerzen <jgoerzen@complete.org>")]
+#[structopt(name = "xbnet", about = "Networking for XBee Radios", author = "John Goerzen <jgoerzen@complete.org>")]
 struct Opt {
     /// Activate debug mode
     // short and long flags (-d, --debug) will be deduced from the field's name

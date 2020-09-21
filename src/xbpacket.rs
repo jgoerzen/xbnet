@@ -58,7 +58,7 @@ pub struct XBTXRequest<'a> {
     pub payload: &'a [u8],
 }
 
-impl XBTXRequest {
+impl<'a> XBTXRequest<'a> {
     pub fn serialize(&self) -> Result<Bytes, TXGenError> {
         if self.payload.is_empty() {
             return Err(TXGenError::InvalidLen);
@@ -104,7 +104,7 @@ impl XBTXRequest {
 
 /// Calculate an XBee checksum over a slice
 pub fn xbchecksum(data: &[u8]) -> u8 {
-    let sumu64 = data.into_iter().map(|x| u64::from(x)).sum();
+    let sumu64: u64 = data.into_iter().map(|x| u64::from(*x)).sum();
     0xffu8 - (sumu64 as u8)
 }
 
@@ -137,3 +137,33 @@ pub fn mac48to64(mac48: &[u8; 6], pattern64: u64) -> u64 {
     mac64
 }
 
+/** Convert the given data into zero or more packets for transmission.
+
+We create a leading byte that indicates how many more XBee packets are remaining
+for the block.  When zero, the receiver should process the accumulated data. */
+pub fn packetize_data(maxpacketsize: usize, dest: XBDestAddr, data: &[u8]) -> Result<Vec<XBTXRequest>, String> {
+    let mut retval = Vec::new();
+    if data.is_empty() {
+        return retval;
+    }
+
+    let chunks: Vec<&[u8]> = data.chunks(maxpacketsize - 1).collect();
+    let mut chunks_remaining: u8 = u8::try_from(chunks.len() - 1).map_err(|e| String::from("More than 255 chunks to transmit"))?;
+    for chunk in chunks {
+        let mut payload = Bytes::new();
+        payload.push_u8(chunks_remaining);
+        payload.push_slice(chunk);
+        let packet = XBTXRequest{
+            frame_id: 0,
+            dest_addr: dest,
+            broadcast_radius: 0,
+            transmit_options: 0,
+            payload
+        };
+
+        retval.push(packet);
+        chunks_remaining -= 1;
+    }
+
+    Ok(retval)
+}
