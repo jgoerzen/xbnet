@@ -100,11 +100,13 @@ fn main() {
         }
         Command::Pipe { dest } => {
             let dest_u64: u64 = u64::from_str_radix(&dest, 16).expect("Invalid destination");
+            let maxpacketsize = xb.maxpacketsize;
             thread::spawn(move || {
                 pipe::stdout_processor(&mut xbreframer, &mut xb.ser_reader)
                     .expect("Failure in stdout_processor")
             });
-            pipe::stdin_processor(dest_u64, 1600, xbeesender).expect("Failure in stdin_processor");
+            pipe::stdin_processor(dest_u64, maxpacketsize - 1, xbeesender)
+                .expect("Failure in stdin_processor");
             // Make sure queued up data is sent
             let _ = writerthread.join();
         }

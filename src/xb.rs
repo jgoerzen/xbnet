@@ -165,6 +165,7 @@ fn writerthread(
     maxpacketsize: usize,
     writerrx: crossbeam_channel::Receiver<XBTX>,
 ) {
+    let mut packetstream = PacketStream::new();
     for item in writerrx.iter() {
         match item {
             XBTX::Shutdown => return,
@@ -172,12 +173,17 @@ fn writerthread(
                 // Here we receive a block of data, which hasn't been
                 // packetized.  Packetize it and send out the result.
 
-                match packetize_data(maxpacketsize, &dest, &data) {
+                match packetstream.packetize_data(maxpacketsize, &dest, &data) {
                     Ok(packets) => {
                         for packet in packets.into_iter() {
                             match packet.serialize() {
                                 Ok(datatowrite) => {
-                                    trace!("TX to {:?} data {}", &dest, hex::encode(&datatowrite));
+                                    trace!(
+                                        "TX ID {} to {:?} data {}",
+                                        packet.frame_id,
+                                        &dest,
+                                        hex::encode(&datatowrite)
+                                    );
                                     ser.swrite.write_all(&datatowrite).unwrap();
                                     ser.swrite.flush().unwrap();
                                 }

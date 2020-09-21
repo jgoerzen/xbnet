@@ -156,40 +156,63 @@ pub fn mac48to64(mac48: &[u8; 6], pattern64: u64) -> u64 {
     mac64
 }
 
-/** Convert the given data into zero or more packets for transmission.
+pub struct PacketStream {
+    /// The counter for the frame
+    framecounter: u8,
+}
 
-We create a leading byte that indicates how many more XBee packets are remaining
-for the block.  When zero, the receiver should process the accumulated data. */
-pub fn packetize_data(
-    maxpacketsize: usize,
-    dest: &XBDestAddr,
-    data: &[u8],
-) -> Result<Vec<XBTXRequest>, String> {
-    let mut retval = Vec::new();
-    if data.is_empty() {
-        return Ok(retval);
+impl PacketStream {
+    pub fn new() -> Self {
+        PacketStream { framecounter: 1 }
     }
 
-    let chunks: Vec<&[u8]> = data.chunks(maxpacketsize - 1).collect();
-    let mut chunks_remaining: u8 = u8::try_from(chunks.len() - 1)
-        .map_err(|e| String::from("More than 255 chunks to transmit"))?;
-    for chunk in chunks {
-        let mut payload = BytesMut::new();
-        payload.put_u8(chunks_remaining);
-        payload.put_slice(chunk);
-        let packet = XBTXRequest {
-            frame_id: 0,
-            dest_addr: dest.clone(),
-            broadcast_radius: 0,
-            transmit_options: 0,
-            payload: Bytes::from(payload),
-        };
-
-        retval.push(packet);
-        chunks_remaining -= 1;
+    pub fn get_and_incr_framecounter(&mut self) -> u8 {
+        let retval = self.framecounter;
+        if self.framecounter == std::u8::MAX {
+            self.framecounter = 1
+        } else {
+            self.framecounter += 1
+        }
+        retval
     }
 
-    Ok(retval)
+    /** Convert the given data into zero or more packets for transmission.
+
+    We create a leading byte that indicates how many more XBee packets are remaining
+    for the block.  When zero, the receiver should process the accumulated data. */
+    pub fn packetize_data(
+        &mut self,
+        maxpacketsize: usize,
+        dest: &XBDestAddr,
+        data: &[u8],
+    ) -> Result<Vec<XBTXRequest>, String> {
+        let mut retval = Vec::new();
+        if data.is_empty() {
+            return Ok(retval);
+        }
+
+        let chunks: Vec<&[u8]> = data.chunks(maxpacketsize - 1).collect();
+        let mut chunks_remaining: u8 = u8::try_from(chunks.len() - 1)
+            .map_err(|e| String::from("More than 255 chunks to transmit"))?;
+        for chunk in chunks {
+            let mut payload = BytesMut::new();
+            payload.put_u8(chunks_remaining);
+            payload.put_slice(chunk);
+            let frame_id = self.get_and_incr_framecounter();
+            let packet = XBTXRequest {
+                frame_id,
+                dest_addr: dest.clone(),
+                broadcast_radius: 0,
+                transmit_options: 0,
+                payload: Bytes::from(payload),
+            };
+
+            retval.push(packet);
+            chunks_remaining -= 1;
+        }
+
+        Ok(retval)
+    }
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -203,4 +226,14 @@ pub struct RXPacket {
     pub sender_addr16: u16,
     pub rx_options: u8,
     pub payload: Bytes,
+}
+
+/** A Digi extended transmit status frame, 0x8B */
+#[derive(PartialEq, Eq, Debug)]
+pub struct ExtTxStatus {
+    pub frame_id: u8,
+    pub dest_addr_16: u16,
+    pub tx_retry_count: u8,
+    pub delivery_status: u8,
+    pub discovery_status: u8,
 }

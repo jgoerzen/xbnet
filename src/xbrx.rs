@@ -75,27 +75,47 @@ pub fn rxxbpacket(ser: &mut XBSerReader) -> Option<RXPacket> {
 
     let mut inner = Bytes::from(inner);
     let frametype = inner.get_u8();
-    if frametype != 0x90 {
-        debug!("SERIN: Non-0x90 frame; data: {}", hex::encode(inner));
-        return None;
+    match frametype {
+        0x8B => {
+            // Delivery status update.  Log and ignore.
+            let frame_id = inner.get_u8();
+            let dest_addr_16 = inner.get_u16();
+            let tx_retry_count = inner.get_u8();
+            let delivery_status = inner.get_u8();
+            let discovery_status = inner.get_u8();
+            let txstatus = ExtTxStatus {
+                frame_id,
+                dest_addr_16,
+                tx_retry_count,
+                delivery_status,
+                discovery_status,
+            };
+            trace!("TX STATUS: {:?}", txstatus);
+            None
+        }
+        0x90 => {
+            let sender_addr64 = inner.get_u64();
+            let sender_addr16 = inner.get_u16();
+            let rx_options = inner.get_u8();
+            let payload = inner.to_bytes();
+            trace!(
+                "SERIN: packet from {} / {}, payload {}",
+                hex::encode(sender_addr64.to_be_bytes()),
+                hex::encode(sender_addr16.to_be_bytes()),
+                hex::encode(&payload)
+            );
+            Some(RXPacket {
+                sender_addr64,
+                sender_addr16,
+                rx_options,
+                payload,
+            })
+        }
+        _ => {
+            debug!("SERIN: Non-0x90 frame; data: {}", hex::encode(inner));
+            None
+        }
     }
-
-    let sender_addr64 = inner.get_u64();
-    let sender_addr16 = inner.get_u16();
-    let rx_options = inner.get_u8();
-    let payload = inner.to_bytes();
-    trace!(
-        "SERIN: packet from {} / {}, payload {}",
-        hex::encode(sender_addr64.to_be_bytes()),
-        hex::encode(sender_addr16.to_be_bytes()),
-        hex::encode(&payload)
-    );
-    Some(RXPacket {
-        sender_addr64,
-        sender_addr16,
-        rx_options,
-        payload,
-    })
 }
 
 /// Like rxxbpacket, but wait until we have a valid packet.
