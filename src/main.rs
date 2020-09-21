@@ -70,7 +70,7 @@ fn main() {
     if opt.debug {
         WriteLogger::init(LevelFilter::Trace, Config::default(), io::stderr()).expect("Failed to init log");
     }
-    info!("lora starting");
+    info!("xbnet starting");
 
     let xbser = ser::XBSer::new(opt.port).expect("Failed to initialize serial port");
     let (xb, xbeesender) = xb::XB::new(xbser, opt.initfile);
@@ -84,7 +84,7 @@ fn main() {
             ping::displaypongs(&mut xbreframer, &xb.ser);
         },
         Command::Pong => {
-            ping::pong(&mut xbreframer, &xb.ser, xbeesender).expect("Failure in loratostdout");
+            ping::pong(&mut xbreframer, &xb.ser, xbeesender).expect("Failure in pong");
         }
     }
 }
