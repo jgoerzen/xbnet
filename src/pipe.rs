@@ -17,4 +17,39 @@
 
 use std::io;
 use std::io::{Read, Write};
+use crate::xb::*;
+use crate::xbpacket::*;
+use crate::ser::*;
+use crate::xbrx::*;
 use crossbeam_channel;
+use std::thread;
+use std::time::Duration;
+use bytes::*;
+
+const INTERVAL: u64 = 5;
+
+pub fn stdin_processor(dest: u64, maxframesize: usize,
+                       sender: crossbeam_channel::Sender<(XBDestAddr, Bytes)>) -> io::Result<()> {
+    let stdin = io::stdin();
+    let mut br = io::BufReader::new(stdin);
+    let mut buf = vec![0u8; maxframesize - 1];
+
+    loop {
+        let res = br.read(&mut buf)?;
+        if res == 0 {
+            // EOF
+            return Ok(());
+        }
+
+        sender.send((XBDestAddr::U64(dest), Bytes::copy_from_slice(&buf[0..res]))).unwrap();
+    }
+}
+
+pub fn stdout_processor(xbreframer: &mut XBReframer, ser: &XBSer) -> io::Result<()> {
+    let mut stdout = io::stdout();
+    loop {
+        let (_fromu64, _fromu16, payload) = xbreframer.rxframe(ser);
+        stdout.write_all(&payload)?;
+        stdout.flush()?;
+    }
+}

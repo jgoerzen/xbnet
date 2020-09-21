@@ -25,7 +25,7 @@ mod ser;
 mod xb;
 mod xbpacket;
 mod xbrx;
-// mod pipe;
+mod pipe;
 mod ping;
 
 use std::path::PathBuf;
@@ -62,6 +62,13 @@ enum Command {
     },
     /// Receive ping requests and transmit pongs
     Pong,
+    /// Pipe data across radios using the xbnet protocol
+    Pipe{
+        /// The 64-bit destination for the pipe, in hex
+        #[structopt(long)]
+        dest: String,
+        // FIXME: add a paremter to accept data from only that place
+    },
 }
 
 fn main() {
@@ -85,6 +92,11 @@ fn main() {
         },
         Command::Pong => {
             ping::pong(&mut xbreframer, &xb.ser, xbeesender).expect("Failure in pong");
-        }
+        },
+        Command::Pipe{dest} => {
+            let dest_u64:u64 = u64::from_str_radix(&dest, 16).expect("Invalid destination");
+            thread::spawn(move || pipe::stdin_processor(dest_u64, 1600, xbeesender).expect("Failure in stdin_processor"));
+            pipe::stdout_processor(&mut xbreframer, &xb.ser).expect("Failure in stdout_processor");
+        },
     }
 }
