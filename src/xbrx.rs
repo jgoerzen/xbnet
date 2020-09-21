@@ -19,9 +19,10 @@
 */
 
 use crate::ser::XBSer;
+use crate::xbpacket::*;
 use log::*;
 use std::fs;
-use std::io::{BufRead, BufReader, Error, ErrorKind};
+use std::io::{BufRead, BufReader, Error, ErrorKind, Read};
 use std::io;
 use crossbeam_channel;
 use hex;
@@ -36,7 +37,7 @@ use std::collections::HashMap;
 None if it's not an RX frame, or if there is a checksum mismatch. */
 pub fn rxxbpacket(ser: &XBSer) -> Option<RXPacket> {
     let mut junkbytes = BytesMut::new();
-    let serport = ser.br.lock().unwrap();
+    let serport = *ser.br.lock().unwrap();
     loop {
         let mut startdelim = [0u8; 1];
         serport.read_exact(&mut startdelim).unwrap();
@@ -45,7 +46,9 @@ pub fn rxxbpacket(ser: &XBSer) -> Option<RXPacket> {
                 error!("Receiving junk");
             }
 
-            junkbytes.push(startdelim);
+            junkbytes.put_u8(startdelim[0]);
+        } else {
+            break;
         }
     }
 
@@ -86,7 +89,7 @@ pub fn rxxbpacket(ser: &XBSer) -> Option<RXPacket> {
     let sender_addr16 = inner.get_u16();
     let sender_rxoptions = inner.get_u8();
     let payload = inner.to_bytes();
-    trace!("SERIN: packet from {} / {}, payload {}", hex::encode(sender_addr64), hex::encode(sender_addr16), hex::encode(payload));
+    trace!("SERIN: packet from {} / {}, payload {}", hex::encode(sender_addr64.to_be_bytes()), hex::encode(sender_addr16.to_be_bytes()), hex::encode(payload));
     Some(RXPacket {sender_addr64, sender_addr16, rx_options, payload})
 }
 
@@ -116,17 +119,17 @@ impl XBReframer {
     /// Receive a frame.  Indicate the sender (u64, u16) and payload.
     pub fn rxframe(&mut self, ser: &XBSer) -> (u64, u16, Bytes) {
         loop {
-            let packet = rxxbpacket_wait();
-            let mut frame = if let Some(olddata) = self.buf.get(packet.sender_addr64) {
-                olddata
+            let packet = rxxbpacket_wait(ser);
+            let mut frame = if let Some(olddata) = self.buf.get(&packet.sender_addr64) {
+                *olddata
             } else {
                 BytesMut::new()
             }
 
-            frame.extend_from_slice(packet.payload[1..]);
+            frame.extend_from_slice(&packet.payload[1..]);
             if packet.payload[0] == 0x0 {
-                self.buf.remove(packet.sender_addr64);
-                return (packet.sender_addr64, packet.sender_addr16, frame);
+                self.buf.remove(&packet.sender_addr64);
+                return (packet.sender_addr64, packet.sender_addr16, frame.freeze());
             } else {
                 self.buf.insert(packet.sender_addr64, frame);
             }

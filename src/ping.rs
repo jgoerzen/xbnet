@@ -18,9 +18,12 @@
 use std::io;
 use crate::xb::*;
 use crate::xbpacket::*;
+use crate::ser::*;
+use crate::xbrx::*;
 use crossbeam_channel;
 use std::thread;
 use std::time::Duration;
+use bytes::*;
 
 const INTERVAL: u64 = 5;
 
@@ -29,7 +32,7 @@ pub fn genpings(dest: u64, sender: crossbeam_channel::Sender<(XBDestAddr, Bytes)
     loop {
         let sendstr = format!("Ping {}", counter);
         println!("SEND: {}", sendstr);
-        sender.send((dest, Bytes::from(sendstr.as_bytes())));
+        sender.send((XBDestAddr::U64(dest), Bytes::from(sendstr.as_bytes())));
         thread::sleep(Duration::from_secs(INTERVAL));
         counter += 1;
     }
@@ -45,3 +48,4 @@ pub fn pong(xbreframer: &mut XBReframer, ser: &XBSer, sender: crossbeam_channel:
         }
     }
 }
+

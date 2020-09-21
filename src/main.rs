@@ -24,11 +24,13 @@ use std::thread;
 mod ser;
 mod xb;
 mod xbpacket;
+mod xbrx;
 mod pipe;
 mod ping;
 
 use std::path::PathBuf;
 use structopt::StructOpt;
+use std::convert::TryInto;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "xbnet", about = "Networking for XBee Radios", author = "John Goerzen <jgoerzen@complete.org>")]
@@ -70,21 +72,19 @@ fn main() {
     }
     info!("lora starting");
 
-    let maxpacketsize = opt.maxpacketsize;
-    
     let xbser = ser::XBSer::new(opt.port).expect("Failed to initialize serial port");
     let (mut xb, xbeesender) = xb::XB::new(xbser, opt.initfile);
-    let mut xbreframer = XBReframer::new();
+    let mut xbreframer = xbrx::XBReframer::new();
 
 
     match opt.cmd {
-        Command::Ping(p) => {
-            let dest_u64 = hex::decode(p.dest).unwrap();
+        Command::Ping{dest} => {
+            let dest_u64 = u64::from_be_bytes(hex::decode(dest).unwrap().as_slice().try_into().unwrap());
             thread::spawn(move || ping::genpings(dest_u64, xbeesender).expect("Failure in genpings"));
             xbreframer.discardframes(&xb.ser);
         },
         Command::Pong => {
-            ping::pong(&mut xbreframer, &xb.ser).expect("Failure in loratostdout");
+            ping::pong(&mut xbreframer, &xb.ser, xbeesender).expect("Failure in loratostdout");
         }
     }
 }
