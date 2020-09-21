@@ -167,3 +167,17 @@ pub fn packetize_data(maxpacketsize: usize, dest: XBDestAddr, data: &[u8]) -> Re
 
     Ok(retval)
 }
+
+
+//////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+// RX side
+
+/** A Digi receive packet, 0x90 */
+#[derive(PartialEq, Eq, Ord, Debug)]
+pub struct RXPacket {
+    sender_addr64: u64,
+    sender_addr16: u16,
+    rx_options: u8,
+    payload: Bytes,
+}

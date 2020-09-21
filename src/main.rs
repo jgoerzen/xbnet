@@ -38,45 +38,10 @@ struct Opt {
     #[structopt(short, long)]
     debug: bool,
 
-    /// Read and log quality data after receiving packets
-    #[structopt(long)]
-    readqual: bool,
-
-    /// Pack as many bytes as possible into each TX frame, regardless of original framing
-    #[structopt(long)]
-    pack: bool,
-    
     /// Radio initialization command file
     #[structopt(long, parse(from_os_str))]
     initfile: Option<PathBuf>,
 
-    /// Maximum frame size sent to radio [10..250] (valid only for ping and kiss)
-    #[structopt(long, default_value = "100")]
-    maxpacketsize: usize,
-
-    /// Maximum time to transmit at once before giving a chance to receive (in ms). 0=infinite
-    #[structopt(long, default_value = "0")]
-    txslot: u64,
-
-    /// Amount of time (ms) to pause before transmitting a packet
-    /* The
-    main purpose of this is to give the othe rradio a chance to finish
-    decoding the previous packet, send it to the OS, and re-enter RX mode.
-    A secondary purpose is to give the duplex logic a chance to see if
-    anything else is coming in.  Given in ms.
-     */
-    #[structopt(long, default_value = "120")]
-    txwait: u64,
-
-    /// Amount of time (ms) to wait for end-of-transmission signal before transmitting
-    /* The amount of time to wait before transmitting after receiving a
-    packet that indicated more data was forthcoming.  The purpose of this is
-    to compensate for a situation in which the "last" incoming packet was lost,
-    to prevent the receiver from waiting forever for more packets before
-    transmitting.  Given in ms. */
-    #[structopt(long, default_value = "1000")]
-    eotwait: u64,
-    
     #[structopt(parse(from_os_str))]
     /// Serial port to use to communicate with radio
     port: PathBuf,
@@ -87,14 +52,14 @@ struct Opt {
 
 #[derive(Debug, StructOpt)]
 enum Command {
-    /// Pipe data across raios
-    Pipe,
     /// Transmit ping requests
-    Ping,
+    Ping {
+        /// The 64-bit destination for the ping, in hex
+        #[structopt(long)]
+        dest: String,
+    },
     /// Receive ping requests and transmit pongs
     Pong,
-    /// Pipe KISS data across the radios
-    Kiss,
 }
 
 fn main() {
@@ -107,29 +72,19 @@ fn main() {
 
     let maxpacketsize = opt.maxpacketsize;
     
-    let loraser = ser::LoraSer::new(opt.port).expect("Failed to initialize serial port");
-    let (mut ls, radioreceiver) = lorastik::LoraStik::new(loraser, opt.readqual, opt.txwait, opt.eotwait, maxpacketsize, opt.pack, opt.txslot);
-    ls.radiocfg(opt.initfile).expect("Failed to configure radio");
+    let xbser = ser::XBSer::new(opt.port).expect("Failed to initialize serial port");
+    let (mut xb, xbeesender) = xb::XB::new(xbser, opt.initfile);
+    let mut xbreframer = XBReframer::new();
 
-    let mut ls2 = ls.clone();
-    thread::spawn(move || ls2.mainloop().expect("Failure in readerthread"));
 
     match opt.cmd {
-        Command::Pipe => {
-            thread::spawn(move || pipe::stdintolora(&mut ls).expect("Failure in stdintolora"));
-            pipe::loratostdout(radioreceiver).expect("Failure in loratostdout");
-        },
-        Command::Kiss => {
-            thread::spawn(move || kiss::stdintolorakiss(&mut ls).expect("Failure in stdintolorakiss"));
-            kiss::loratostdout(radioreceiver).expect("Failure in loratostdout");
-        },
-        Command::Ping => {
-            thread::spawn(move || ping::genpings(&mut ls).expect("Failure in genpings"));
-            pipe::loratostdout(radioreceiver).expect("Failure in loratostdout");
+        Command::Ping(p) => {
+            let dest_u64 = hex::decode(p.dest).unwrap();
+            thread::spawn(move || ping::genpings(dest_u64, xbeesender).expect("Failure in genpings"));
+            xbreframer.discardframes(&xb.ser);
         },
         Command::Pong => {
-            ping::pong(&mut ls, radioreceiver).expect("Failure in loratostdout");
+            ping::pong(&mut xbreframer, &xb.ser).expect("Failure in loratostdout");
         }
     }
-
 }

@@ -24,24 +24,24 @@ use std::time::Duration;
 
 const INTERVAL: u64 = 5;
 
-pub fn genpings(ls: &mut LoraStik) -> io::Result<()> {
+pub fn genpings(dest: u64, sender: crossbeam_channel::Sender<(XBDestAddr, Bytes)>) -> io::Result<()> {
     let mut counter: u64 = 1;
     loop {
         let sendstr = format!("Ping {}", counter);
         println!("SEND: {}", sendstr);
-        ls.transmit(&sendstr.as_bytes());
+        sender.send((dest, Bytes::from(sendstr.as_bytes())));
         thread::sleep(Duration::from_secs(INTERVAL));
         counter += 1;
     }
 }
 
 /// Reply to pings
-pub fn pong(ls: &mut LoraStik, receiver: crossbeam_channel::Receiver<ReceivedFrames>) -> io::Result<()> {
+pub fn pong(xbreframer: &mut XBReframer, ser: &XBSer, sender: crossbeam_channel::Sender<(XBDestAddr, Bytes)>) -> io::Result<()> {
     loop {
-        let data = receiver.recv().unwrap();
-        let resp = format!("Pong {}, {:?}", String::from_utf8_lossy(&data.0), data.1);
-        println!("SEND: {}", resp);
-        ls.transmit(resp.as_bytes());
+        let (addr_64, addr_16, payload) = xbreframer.rxframe(ser);
+        if payload.starts_with(b"Ping ") {
+            let resp = format!("Pong {}", Strimg::from_utf8_lossy(payload[5..]));
+            sender.send((XBDestAddr::U64(addr_64), Bytes::from(resp.as_bytes())));
+        }
     }
 }
-
