@@ -25,7 +25,7 @@ mod ser;
 mod xb;
 mod xbpacket;
 mod xbrx;
-mod pipe;
+// mod pipe;
 mod ping;
 
 use std::path::PathBuf;

@@ -23,6 +23,7 @@ use log::*;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::path::PathBuf;
+use bytes::*;
 
 #[derive(Clone)]
 pub struct XBSer {
@@ -70,11 +71,11 @@ impl XBSer {
     /// Transmits a command with terminating EOL characters
     pub fn writeln(&mut self, mut data: &str) -> io::Result<()> {
         trace!("{:?} SEROUT: {}", self.portname, data);
-        let mut data = ByteMut::from(data.as_bytes());
-        data.push(b"\r\n");
+        let mut data = BytesMut::from(data.as_bytes());
+        data.put(&b"\r\n"[..]);
         // Give the receiver a chance to process
         // FIXME: lock this only once
-        self.swrite.lock().unwrap().write_all(data)?;
+        self.swrite.lock().unwrap().write_all(&data)?;
         self.swrite.lock().unwrap().flush()
     }
 }

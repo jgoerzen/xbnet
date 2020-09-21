@@ -43,7 +43,7 @@ pub fn pong(xbreframer: &mut XBReframer, ser: &XBSer, sender: crossbeam_channel:
     loop {
         let (addr_64, addr_16, payload) = xbreframer.rxframe(ser);
         if payload.starts_with(b"Ping ") {
-            let resp = format!("Pong {}", Strimg::from_utf8_lossy(payload[5..]));
+            let resp = format!("Pong {}", String::from_utf8_lossy(&payload[5..]));
             sender.send((XBDestAddr::U64(addr_64), Bytes::from(resp.as_bytes())));
         }
     }

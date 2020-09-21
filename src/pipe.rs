@@ -17,34 +17,4 @@
 
 use std::io;
 use std::io::{Read, Write};
-use crate::lorastik::{LoraStik, ReceivedFrames};
 use crossbeam_channel;
-
-/// A thread for stdin processing
-pub fn stdintolora(ls: &mut LoraStik) -> io::Result<()> {
-    let stdin = io::stdin();
-    let mut br = io::BufReader::new(stdin);
-
-    let mut buf = vec![0u8; 1024];
-
-    loop {
-        let res = br.read(&mut buf)?;
-        if res == 0 {
-            // EOF
-            return Ok(());
-        }
-
-        ls.transmit(&buf[0..res]);
-    }
-}
-
-pub fn loratostdout(receiver: crossbeam_channel::Receiver<ReceivedFrames>) -> io::Result<()> {
-    let mut stdout = io::stdout();
-
-    loop {
-        let data = receiver.recv().unwrap();
-        stdout.write_all(&data.0)?;
-        stdout.flush()?;
-    }
-}
-

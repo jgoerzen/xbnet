@@ -65,7 +65,7 @@ pub fn rxxbpacket(ser: &XBSer) -> Option<RXPacket> {
     let length = usize::from(u16::from_be_bytes(lenbytes));
 
     // Now read the rest of the frame.
-    let mut inner = [0u8; length];
+    let mut inner = vec![0u8; length];
 
     serport.read_exact(&mut inner).unwrap();
 
@@ -124,7 +124,7 @@ impl XBReframer {
                 *olddata
             } else {
                 BytesMut::new()
-            }
+            };
 
             frame.extend_from_slice(&packet.payload[1..]);
             if packet.payload[0] == 0x0 {

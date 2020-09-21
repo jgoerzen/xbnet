@@ -153,10 +153,10 @@ fn writerthread(ser: XBSer, maxpacketsize: usize,
                             serport.flush();
                         },
                         Err(e) => {
-                            error!("Serialization error: {}", e),
+                            error!("Serialization error: {:?}", e);
                         },
-                    },
-                }
+                    };
+                };
             },
             Err(e) => {
                 error!("Packetization error: {}", e);
