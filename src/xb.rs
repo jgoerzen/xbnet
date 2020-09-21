@@ -138,6 +138,8 @@ impl XB {
         ser.writeln("ATCN").unwrap();
         assert_eq!(ser.readln().unwrap().unwrap(), String::from("OK"));
 
+        debug!("Radio configuration complete");
+
         let ser2 = ser.clone();
         thread::spawn(move || writerthread(ser2, maxpacketsize, writerrx));
         
