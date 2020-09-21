@@ -72,7 +72,7 @@ impl XB {
 
     May panic if an error occurs during initialization.
     */
-    pub fn new(ser: XBSer, initfile: Option<PathBuf>) -> (XB, crossbeam_channel::Sender<Bytes>) {
+    pub fn new(ser: XBSer, initfile: Option<PathBuf>) -> (XB, crossbeam_channel::Sender<(XBDestAddr, Bytes)>) {
         // FIXME: make this maximum of 5 configurable
         let (writertx, writerrx) = crossbeam_channel::bounded(5);
 
@@ -124,7 +124,7 @@ impl XB {
         assert_response(ser.readln().unwrap(), "OK");
 
         let ser2 = ser.clone();
-        thread::spawn(move || writerthread(ser2, writerrx));
+        thread::spawn(move || writerthread(ser2, maxpacketsize, writerrx));
         
         (XB {
             ser,
@@ -134,10 +134,31 @@ impl XB {
     }
 }
 
-fn writerthread(ser: XBSer, writerrx: crossbeam_channel::Receiver<Bytes>) {
-    for data in writerrx.iter() {
-        // FIXME: lock this only once
-        ser.swrite.lock().unwrap().write_all(data).expect("Errror on serial port sending");
-        ser.swrite.lock().unwrap().flush();
+fn writerthread(ser: XBSer, maxpacketsize: usize,
+                writerrx: crossbeam_channel::Receiver<(XBDestAddr, Bytes)>) {
+    for (dest, data) in writerrx.iter() {
+        // Here we receive a block of data, which hasn't been
+        // packetized.  Packetize it and send out the result.
+
+        match packetize_data(maxpacketsize, dest, data) {
+            Ok(packets) => {
+                let serport = ser.swrite.lock().unwrap();
+                for packet in packets.into_iter() {
+                    match packet.serialize() {
+                        Ok(datatowrite) => {
+                            trace!("TX to {:?} data {}", dest, hex::encode(datatowrite));
+                            serport.write_all(datatowrite).unwrap();
+                            serport.flush();
+                        },
+                        Err(e) => {
+                            error!("Serialization error: {}", e),
+                        },
+                    },
+                }
+            },
+            Err(e) => {
+                error!("Packetization error: {}", e);
+            }
+        }
     }
 }
