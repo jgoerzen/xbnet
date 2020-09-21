@@ -85,6 +85,15 @@ impl XB {
         ser.swrite.lock().unwrap().flush().unwrap();
 
         trace!("Waiting for OK");
+        loop {
+            // There might be other packets flowing in while we wait for the OK.  FIXME: this could still find
+            // it prematurely if OK\r occurs in a packet.
+            let line = ser.readln().unwrap().unwrap();
+            trace!("Received: {}", line);
+            if line.ends_with("OK") {
+                break;
+            }
+        }
 
         assert_eq!(ser.readln().unwrap().unwrap(), String::from("OK"));
 
