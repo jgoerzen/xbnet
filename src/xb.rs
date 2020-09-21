@@ -84,18 +84,19 @@ impl XB {
         ser.swrite.lock().unwrap().write_all(b"+++").unwrap();
         ser.swrite.lock().unwrap().flush().unwrap();
 
-        trace!("Waiting for OK");
         loop {
             // There might be other packets flowing in while we wait for the OK.  FIXME: this could still find
             // it prematurely if OK\r occurs in a packet.
+            trace!("Waiting for OK");
             let line = ser.readln().unwrap().unwrap();
             trace!("Received: {}", line);
             if line.ends_with("OK") {
+                trace!("Received OK");
                 break;
+            } else {
+                trace!("Will continue waiting for OK");
             }
         }
-
-        assert_eq!(ser.readln().unwrap().unwrap(), String::from("OK"));
 
         if let Some(file) = initfile {
             let f = fs::File::open(file).unwrap();
