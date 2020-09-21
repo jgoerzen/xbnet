@@ -198,7 +198,7 @@ impl PacketStream {
             let mut payload = BytesMut::new();
             payload.put_u8(chunks_remaining);
             payload.put_slice(chunk);
-            let frame_id = self.get_and_incr_framecounter(); // FIXME: make this configurable whether we get back TX reports.
+            let frame_id = 0; // self.get_and_incr_framecounter(); // FIXME: make this configurable whether we get back TX reports.
             let packet = XBTXRequest {
                 frame_id,
                 dest_addr: dest.clone(),
