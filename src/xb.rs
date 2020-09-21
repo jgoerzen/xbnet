@@ -89,7 +89,6 @@ impl XB {
             // it prematurely if OK\r occurs in a packet.
             trace!("Waiting for OK");
             let line = ser.readln().unwrap().unwrap();
-            trace!("Received: {}", line);
             if line.ends_with("OK") {
                 trace!("Received OK");
                 break;
