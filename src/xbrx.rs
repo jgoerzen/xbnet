@@ -20,11 +20,11 @@
 
 use crate::ser::*;
 use crate::xbpacket::*;
-use log::*;
-use std::io::{Read};
-use hex;
 use bytes::*;
+use hex;
+use log::*;
 use std::collections::HashMap;
+use std::io::Read;
 
 /** Attempts to read a packet from the port.  Returns
 None if it's not an RX frame, or if there is a checksum mismatch. */
@@ -45,8 +45,11 @@ pub fn rxxbpacket(ser: &mut XBSerReader) -> Option<RXPacket> {
     }
 
     // OK, got the start delimeter.  Log the junk, if any.
-    if ! junkbytes.is_empty() {
-        error!("Found start delimeter after reading junk: {}", hex::encode(&junkbytes));
+    if !junkbytes.is_empty() {
+        error!(
+            "Found start delimeter after reading junk: {}",
+            hex::encode(&junkbytes)
+        );
         junkbytes.clear();
     }
 
@@ -81,8 +84,18 @@ pub fn rxxbpacket(ser: &mut XBSerReader) -> Option<RXPacket> {
     let sender_addr16 = inner.get_u16();
     let rx_options = inner.get_u8();
     let payload = inner.to_bytes();
-    trace!("SERIN: packet from {} / {}, payload {}", hex::encode(sender_addr64.to_be_bytes()), hex::encode(sender_addr16.to_be_bytes()), hex::encode(&payload));
-    Some(RXPacket {sender_addr64, sender_addr16, rx_options, payload})
+    trace!(
+        "SERIN: packet from {} / {}, payload {}",
+        hex::encode(sender_addr64.to_be_bytes()),
+        hex::encode(sender_addr16.to_be_bytes()),
+        hex::encode(&payload)
+    );
+    Some(RXPacket {
+        sender_addr64,
+        sender_addr16,
+        rx_options,
+        payload,
+    })
 }
 
 /// Like rxxbpacket, but wait until we have a valid packet.

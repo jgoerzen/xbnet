@@ -15,15 +15,15 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-use std::io;
+use crate::ser::*;
 use crate::xb::*;
 use crate::xbpacket::*;
-use crate::ser::*;
 use crate::xbrx::*;
+use bytes::*;
 use crossbeam_channel;
+use std::io;
 use std::thread;
 use std::time::Duration;
-use bytes::*;
 
 const INTERVAL: u64 = 5;
 
@@ -32,7 +32,9 @@ pub fn genpings(dest: u64, sender: crossbeam_channel::Sender<XBTX>) -> io::Resul
     loop {
         let sendstr = format!("Ping {}", counter);
         println!("SEND: {}", sendstr);
-        sender.send(XBTX::TXData(XBDestAddr::U64(dest), Bytes::from(sendstr))).unwrap();
+        sender
+            .send(XBTX::TXData(XBDestAddr::U64(dest), Bytes::from(sendstr)))
+            .unwrap();
         thread::sleep(Duration::from_secs(INTERVAL));
         counter += 1;
     }
@@ -42,19 +44,32 @@ pub fn genpings(dest: u64, sender: crossbeam_channel::Sender<XBTX>) -> io::Resul
 pub fn displaypongs(xbreframer: &mut XBReframer, ser: &mut XBSerReader) -> () {
     loop {
         let (fromu64, _fromu16, payload) = xbreframer.rxframe(ser);
-        println!("RECV from {}: {}", hex::encode(fromu64.to_be_bytes()), String::from_utf8_lossy(&payload));
+        println!(
+            "RECV from {}: {}",
+            hex::encode(fromu64.to_be_bytes()),
+            String::from_utf8_lossy(&payload)
+        );
     }
 }
 
 /// Reply to pings
-pub fn pong(xbreframer: &mut XBReframer, ser: &mut XBSerReader, sender: crossbeam_channel::Sender<XBTX>) -> io::Result<()> {
+pub fn pong(
+    xbreframer: &mut XBReframer,
+    ser: &mut XBSerReader,
+    sender: crossbeam_channel::Sender<XBTX>,
+) -> io::Result<()> {
     loop {
         let (fromu64, _addr_16, payload) = xbreframer.rxframe(ser);
         if payload.starts_with(b"Ping ") {
-            println!("RECV from {}: {}", hex::encode(fromu64.to_be_bytes()), String::from_utf8_lossy(&payload));
+            println!(
+                "RECV from {}: {}",
+                hex::encode(fromu64.to_be_bytes()),
+                String::from_utf8_lossy(&payload)
+            );
             let resp = Bytes::from(format!("Pong {}", String::from_utf8_lossy(&payload[5..])));
-            sender.send(XBTX::TXData(XBDestAddr::U64(fromu64), resp)).unwrap();
+            sender
+                .send(XBTX::TXData(XBDestAddr::U64(fromu64), resp))
+                .unwrap();
         }
     }
 }
-

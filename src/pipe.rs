@@ -15,17 +15,20 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-use std::io;
-use std::io::{Read, Write};
+use crate::ser::*;
 use crate::xb::*;
 use crate::xbpacket::*;
-use crate::ser::*;
 use crate::xbrx::*;
-use crossbeam_channel;
 use bytes::*;
+use crossbeam_channel;
+use std::io;
+use std::io::{Read, Write};
 
-pub fn stdin_processor(dest: u64, maxframesize: usize,
-                       sender: crossbeam_channel::Sender<XBTX>) -> io::Result<()> {
+pub fn stdin_processor(
+    dest: u64,
+    maxframesize: usize,
+    sender: crossbeam_channel::Sender<XBTX>,
+) -> io::Result<()> {
     let stdin = io::stdin();
     let mut br = io::BufReader::new(stdin);
     let mut buf = vec![0u8; maxframesize - 1];
@@ -38,7 +41,12 @@ pub fn stdin_processor(dest: u64, maxframesize: usize,
             return Ok(());
         }
 
-        sender.send(XBTX::TXData(XBDestAddr::U64(dest), Bytes::copy_from_slice(&buf[0..res]))).unwrap();
+        sender
+            .send(XBTX::TXData(
+                XBDestAddr::U64(dest),
+                Bytes::copy_from_slice(&buf[0..res]),
+            ))
+            .unwrap();
     }
 }
 

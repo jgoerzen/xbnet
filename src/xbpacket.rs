@@ -18,7 +18,7 @@
 */
 
 use bytes::*;
-use std::convert::{TryInto, TryFrom};
+use std::convert::{TryFrom, TryInto};
 use std::fmt;
 
 /** XBee transmissions can give either a 64-bit or a 16-bit destination
@@ -30,7 +30,7 @@ pub enum XBDestAddr {
 
     /// The 64-bit destination address.  0xFFFF for broadcast.
     /// When a 16-bit destination is given, this will be transmitted as 0xFFFFFFFFFFFFFFFF.
-    U64(u64)
+    U64(u64),
 }
 
 impl fmt::Debug for XBDestAddr {
@@ -40,12 +40,12 @@ impl fmt::Debug for XBDestAddr {
                 f.write_str("U16(")?;
                 f.write_str(&hex::encode(x.to_be_bytes()))?;
                 f.write_str(")")
-            },
+            }
             XBDestAddr::U64(x) => {
                 f.write_str("U64(")?;
                 f.write_str(&hex::encode(x.to_be_bytes()))?;
                 f.write_str(")")
-            },
+            }
         }
     }
 }
@@ -54,7 +54,7 @@ impl fmt::Debug for XBDestAddr {
 #[derive(Eq, PartialEq, Debug)]
 pub enum TXGenError {
     /// The payload was an invalid length
-    InvalidLen
+    InvalidLen,
 }
 
 /** A Digi 64-bit transmit request, frame type 0x10 */
@@ -87,7 +87,7 @@ impl XBTXRequest {
         // inner parts, then combine them.
         let mut fullframe = BytesMut::new();
 
-        fullframe.put_u8(0x7e);       // Start delimeter
+        fullframe.put_u8(0x7e); // Start delimeter
 
         let mut innerframe = BytesMut::new();
         // Frame type
@@ -98,7 +98,7 @@ impl XBTXRequest {
             XBDestAddr::U16(dest) => {
                 innerframe.put_u64(0xFFFFFFFFFFFFFFFFu64);
                 innerframe.put_u16(dest);
-            },
+            }
             XBDestAddr::U64(dest) => {
                 innerframe.put_u64(dest);
                 innerframe.put_u16(0xFFFEu16);
@@ -160,24 +160,29 @@ pub fn mac48to64(mac48: &[u8; 6], pattern64: u64) -> u64 {
 
 We create a leading byte that indicates how many more XBee packets are remaining
 for the block.  When zero, the receiver should process the accumulated data. */
-pub fn packetize_data(maxpacketsize: usize, dest: &XBDestAddr, data: &[u8]) -> Result<Vec<XBTXRequest>, String> {
+pub fn packetize_data(
+    maxpacketsize: usize,
+    dest: &XBDestAddr,
+    data: &[u8],
+) -> Result<Vec<XBTXRequest>, String> {
     let mut retval = Vec::new();
     if data.is_empty() {
         return Ok(retval);
     }
 
     let chunks: Vec<&[u8]> = data.chunks(maxpacketsize - 1).collect();
-    let mut chunks_remaining: u8 = u8::try_from(chunks.len() - 1).map_err(|e| String::from("More than 255 chunks to transmit"))?;
+    let mut chunks_remaining: u8 = u8::try_from(chunks.len() - 1)
+        .map_err(|e| String::from("More than 255 chunks to transmit"))?;
     for chunk in chunks {
         let mut payload = BytesMut::new();
         payload.put_u8(chunks_remaining);
         payload.put_slice(chunk);
-        let packet = XBTXRequest{
+        let packet = XBTXRequest {
             frame_id: 0,
             dest_addr: dest.clone(),
             broadcast_radius: 0,
             transmit_options: 0,
-            payload: Bytes::from(payload)
+            payload: Bytes::from(payload),
         };
 
         retval.push(packet);
@@ -186,7 +191,6 @@ pub fn packetize_data(maxpacketsize: usize, dest: &XBDestAddr, data: &[u8]) -> R
 
     Ok(retval)
 }
-
 
 //////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////

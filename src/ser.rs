@@ -16,18 +16,17 @@
 
 */
 
-use std::io;
-use serialport::prelude::*;
-use std::io::{BufReader, BufRead, Write};
-use log::*;
-use std::time::Duration;
-use std::path::PathBuf;
 use bytes::*;
+use log::*;
+use serialport::prelude::*;
+use std::io;
+use std::io::{BufRead, BufReader, Write};
+use std::path::PathBuf;
+use std::time::Duration;
 
 pub struct XBSerReader {
     pub br: BufReader<Box<dyn SerialPort>>,
     pub portname: PathBuf,
-
 }
 
 pub struct XBSerWriter {
@@ -35,23 +34,30 @@ pub struct XBSerWriter {
     pub portname: PathBuf,
 }
 
-    /// Initialize the serial system, configuring the port.
-    pub fn new(portname: PathBuf) -> io::Result<(XBSerReader, XBSerWriter)> {
-        let settings = SerialPortSettings {
-            baud_rate: 115200, // FIXME: make this configurable, default 9600
-            data_bits: DataBits::Eight,
-            flow_control: FlowControl::Hardware,
-            parity: Parity::None,
-            stop_bits: StopBits::One,
-            timeout: Duration::new(60 * 60 * 24 * 365 * 20, 0),
-        };
-        let readport = serialport::open_with_settings(&portname, &settings)?;
-        let writeport = readport.try_clone()?;
-        
-        Ok((
-            XBSerReader {br: BufReader::new(readport), portname: portname.clone()},
-            XBSerWriter {swrite: writeport, portname}))
-    }
+/// Initialize the serial system, configuring the port.
+pub fn new(portname: PathBuf) -> io::Result<(XBSerReader, XBSerWriter)> {
+    let settings = SerialPortSettings {
+        baud_rate: 115200, // FIXME: make this configurable, default 9600
+        data_bits: DataBits::Eight,
+        flow_control: FlowControl::Hardware,
+        parity: Parity::None,
+        stop_bits: StopBits::One,
+        timeout: Duration::new(60 * 60 * 24 * 365 * 20, 0),
+    };
+    let readport = serialport::open_with_settings(&portname, &settings)?;
+    let writeport = readport.try_clone()?;
+
+    Ok((
+        XBSerReader {
+            br: BufReader::new(readport),
+            portname: portname.clone(),
+        },
+        XBSerWriter {
+            swrite: writeport,
+            portname,
+        },
+    ))
+}
 
 impl XBSerReader {
     /// Read a line from the port.  Return it with EOL characters removed.
@@ -61,7 +67,7 @@ impl XBSerReader {
         let size = self.br.read_until(0x0D, &mut buf)?;
         let buf = String::from_utf8_lossy(&buf);
         if size == 0 {
-            debug!("{:?}: Received EOF from serial port", self.portname); 
+            debug!("{:?}: Received EOF from serial port", self.portname);
             Ok(None)
         } else {
             let buf = String::from(buf.trim());
@@ -69,7 +75,6 @@ impl XBSerReader {
             Ok(Some(buf))
         }
     }
-
 }
 
 impl XBSerWriter {
@@ -83,5 +88,3 @@ impl XBSerWriter {
         self.swrite.flush()
     }
 }
-
-

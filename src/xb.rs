@@ -17,17 +17,17 @@
 */
 
 use crate::ser::*;
-use log::*;
-use std::fs;
-use std::io::{BufRead, BufReader, Error, ErrorKind};
-use std::io;
+use crate::xbpacket::*;
+use bytes::Bytes;
 use crossbeam_channel;
 use hex;
-use std::thread;
-use std::time::{Duration};
+use log::*;
+use std::fs;
+use std::io;
+use std::io::{BufRead, BufReader, Error, ErrorKind};
 use std::path::PathBuf;
-use bytes::Bytes;
-use crate::xbpacket::*;
+use std::thread;
+use std::time::Duration;
 
 pub fn mkerror(msg: &str) -> Error {
     Error::new(ErrorKind::Other, msg)
@@ -60,7 +60,10 @@ pub fn assert_response(resp: String, expected: String) -> io::Result<()> {
     if resp == expected {
         Ok(())
     } else {
-        Err(mkerror(&format!("Unexpected response: got {}, expected {}", resp, expected)))
+        Err(mkerror(&format!(
+            "Unexpected response: got {}, expected {}",
+            resp, expected
+        )))
     }
 }
 
@@ -74,7 +77,11 @@ impl XB {
 
     May panic if an error occurs during initialization.
     */
-    pub fn new(mut ser_reader: XBSerReader, mut ser_writer: XBSerWriter, initfile: Option<PathBuf>) -> (XB, crossbeam_channel::Sender<XBTX>, thread::JoinHandle<()>) {
+    pub fn new(
+        mut ser_reader: XBSerReader,
+        mut ser_writer: XBSerWriter,
+        initfile: Option<PathBuf>,
+    ) -> (XB, crossbeam_channel::Sender<XBTX>, thread::JoinHandle<()>) {
         // FIXME: make this maximum of 5 configurable
         let (writertx, writerrx) = crossbeam_channel::bounded(5);
 
@@ -133,7 +140,6 @@ impl XB {
         let maxpacket = ser_reader.readln().unwrap().unwrap();
         let maxpacketsize = usize::from(u16::from_str_radix(&maxpacket, 16).unwrap());
 
-
         // Exit command mode
         ser_writer.writeln("ATCN").unwrap();
         assert_eq!(ser_reader.readln().unwrap().unwrap(), String::from("OK"));
@@ -141,44 +147,50 @@ impl XB {
         debug!("Radio configuration complete");
 
         let writerthread = thread::spawn(move || writerthread(ser_writer, maxpacketsize, writerrx));
-        
-        (XB {
-            ser_reader,
-            mymac,
-            maxpacketsize,
-        }, writertx, writerthread)
-    }
 
+        (
+            XB {
+                ser_reader,
+                mymac,
+                maxpacketsize,
+            },
+            writertx,
+            writerthread,
+        )
+    }
 }
 
-fn writerthread(mut ser: XBSerWriter, maxpacketsize: usize,
-                writerrx: crossbeam_channel::Receiver<XBTX>) {
+fn writerthread(
+    mut ser: XBSerWriter,
+    maxpacketsize: usize,
+    writerrx: crossbeam_channel::Receiver<XBTX>,
+) {
     for item in writerrx.iter() {
         match item {
             XBTX::Shutdown => return,
             XBTX::TXData(dest, data) => {
-        // Here we receive a block of data, which hasn't been
-        // packetized.  Packetize it and send out the result.
+                // Here we receive a block of data, which hasn't been
+                // packetized.  Packetize it and send out the result.
 
-        match packetize_data(maxpacketsize, &dest, &data) {
-            Ok(packets) => {
-                for packet in packets.into_iter() {
-                    match packet.serialize() {
-                        Ok(datatowrite) => {
-                            trace!("TX to {:?} data {}", &dest, hex::encode(&datatowrite));
-                            ser.swrite.write_all(&datatowrite).unwrap();
-                            ser.swrite.flush().unwrap();
-                        },
-                        Err(e) => {
-                            error!("Serialization error: {:?}", e);
-                        },
-                    };
-                };
-            },
-            Err(e) => {
-                error!("Packetization error: {}", e);
-            }
-        }
+                match packetize_data(maxpacketsize, &dest, &data) {
+                    Ok(packets) => {
+                        for packet in packets.into_iter() {
+                            match packet.serialize() {
+                                Ok(datatowrite) => {
+                                    trace!("TX to {:?} data {}", &dest, hex::encode(&datatowrite));
+                                    ser.swrite.write_all(&datatowrite).unwrap();
+                                    ser.swrite.flush().unwrap();
+                                }
+                                Err(e) => {
+                                    error!("Serialization error: {:?}", e);
+                                }
+                            };
+                        }
+                    }
+                    Err(e) => {
+                        error!("Packetization error: {}", e);
+                    }
+                }
             }
         }
     }

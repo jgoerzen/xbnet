@@ -16,23 +16,27 @@
 
 */
 
+use log::*;
 use simplelog::*;
 use std::io;
-use log::*;
 use std::thread;
 
+mod ping;
+mod pipe;
 mod ser;
 mod xb;
 mod xbpacket;
 mod xbrx;
-mod pipe;
-mod ping;
 
 use std::path::PathBuf;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "xbnet", about = "Networking for XBee Radios", author = "John Goerzen <jgoerzen@complete.org>")]
+#[structopt(
+    name = "xbnet",
+    about = "Networking for XBee Radios",
+    author = "John Goerzen <jgoerzen@complete.org>"
+)]
 struct Opt {
     /// Activate debug mode
     // short and long flags (-d, --debug) will be deduced from the field's name
@@ -48,7 +52,7 @@ struct Opt {
     port: PathBuf,
 
     #[structopt(subcommand)]
-    cmd: Command
+    cmd: Command,
 }
 
 #[derive(Debug, StructOpt)]
@@ -62,7 +66,7 @@ enum Command {
     /// Receive ping requests and transmit pongs
     Pong,
     /// Pipe data across radios using the xbnet protocol
-    Pipe{
+    Pipe {
         /// The 64-bit destination for the pipe, in hex
         #[structopt(long)]
         dest: String,
@@ -74,7 +78,8 @@ fn main() {
     let opt = Opt::from_args();
 
     if opt.debug {
-        WriteLogger::init(LevelFilter::Trace, Config::default(), io::stderr()).expect("Failed to init log");
+        WriteLogger::init(LevelFilter::Trace, Config::default(), io::stderr())
+            .expect("Failed to init log");
     }
     info!("xbnet starting");
 
@@ -82,23 +87,26 @@ fn main() {
     let (mut xb, xbeesender, writerthread) = xb::XB::new(ser_reader, ser_writer, opt.initfile);
     let mut xbreframer = xbrx::XBReframer::new();
 
-
     match opt.cmd {
-        Command::Ping{dest} => {
-            let dest_u64:u64 = u64::from_str_radix(&dest, 16).expect("Invalid destination");
-            thread::spawn(move || ping::genpings(dest_u64, xbeesender).expect("Failure in genpings"));
+        Command::Ping { dest } => {
+            let dest_u64: u64 = u64::from_str_radix(&dest, 16).expect("Invalid destination");
+            thread::spawn(move || {
+                ping::genpings(dest_u64, xbeesender).expect("Failure in genpings")
+            });
             ping::displaypongs(&mut xbreframer, &mut xb.ser_reader);
-        },
+        }
         Command::Pong => {
             ping::pong(&mut xbreframer, &mut xb.ser_reader, xbeesender).expect("Failure in pong");
-        },
-        Command::Pipe{dest} => {
-            let dest_u64:u64 = u64::from_str_radix(&dest, 16).expect("Invalid destination");
-            thread::spawn(move || pipe::stdout_processor(&mut xbreframer, &mut xb.ser_reader).expect("Failure in stdout_processor"));
+        }
+        Command::Pipe { dest } => {
+            let dest_u64: u64 = u64::from_str_radix(&dest, 16).expect("Invalid destination");
+            thread::spawn(move || {
+                pipe::stdout_processor(&mut xbreframer, &mut xb.ser_reader)
+                    .expect("Failure in stdout_processor")
+            });
             pipe::stdin_processor(dest_u64, 1600, xbeesender).expect("Failure in stdin_processor");
             // Make sure queued up data is sent
             let _ = writerthread.join();
-
-        },
+        }
     }
 }
