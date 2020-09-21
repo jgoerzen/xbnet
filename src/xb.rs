@@ -80,8 +80,11 @@ impl XB {
 
         debug!("Configuring radio");
         thread::sleep(Duration::from_secs(2));
+        trace!("Sending +++");
         ser.swrite.lock().unwrap().write_all(b"+++").unwrap();
-        ser.swrite.lock().unwrap().flush();
+        ser.swrite.lock().unwrap().flush().unwrap();
+
+        trace!("Waiting for OK");
 
         assert_response(ser.readln().unwrap().unwrap(), String::from("OK"));
 
@@ -151,7 +154,7 @@ fn writerthread(ser: XBSer, maxpacketsize: usize,
                         Ok(datatowrite) => {
                             trace!("TX to {:?} data {}", &dest, hex::encode(&datatowrite));
                             serport.write_all(&datatowrite).unwrap();
-                            serport.flush();
+                            serport.flush().unwrap();
                         },
                         Err(e) => {
                             error!("Serialization error: {:?}", e);

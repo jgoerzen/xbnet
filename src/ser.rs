@@ -40,7 +40,7 @@ impl XBSer {
         let settings = SerialPortSettings {
             baud_rate: 115200, // FIXME: make this configurable, default 9600
             data_bits: DataBits::Eight,
-            flow_control: FlowControl::None,
+            flow_control: FlowControl::Hardware,
             parity: Parity::None,
             stop_bits: StopBits::One,
             timeout: Duration::new(60 * 60 * 24 * 365 * 20, 0),
@@ -56,8 +56,9 @@ impl XBSer {
     /// Read a line from the port.  Return it with EOL characters removed.
     /// None if EOF reached.
     pub fn readln(&mut self) -> io::Result<Option<String>> {
-        let mut buf = String::new();
-        let size = self.br.lock().unwrap().read_line(&mut buf)?;
+        let mut buf = Vec::new();
+        let size = self.br.lock().unwrap().read_until(0x0D, &mut buf)?;
+        let buf = String::from_utf8_lossy(&buf);
         if size == 0 {
             debug!("{:?}: Received EOF from serial port", self.portname); 
             Ok(None)

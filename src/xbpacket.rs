@@ -92,7 +92,7 @@ impl XBTXRequest {
         innerframe.put_slice(&self.payload);
 
         // That's it for the inner frame.  Now fill in the outer frame.
-        if let Ok(lenu16) = u16::try_from(self.payload.len()) {
+        if let Ok(lenu16) = u16::try_from(innerframe.len()) {
             fullframe.put_u16(lenu16);
             fullframe.put_slice(&innerframe);
             fullframe.put_u8(xbchecksum(&innerframe));
