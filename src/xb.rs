@@ -35,12 +35,15 @@ pub fn mkerror(msg: &str) -> Error {
     Error::new(ErrorKind::Other, msg)
 }
 
-/// Received frames.  The option is populated only if
-/// readqual is true, and reflects the SNR and RSSI of the
-/// received packet.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ReceivedFrames(pub Vec<u8>, pub Option<(String, String)>);
+/// Data to be transmitted out XBee.
+pub enum XBTX {
+    /// Transmit this data
+    TXData(XBDestAddr, Bytes),
+    /// Shut down the transmitting thread
+    Shutdown,
+}
 
+/// Main XBeeNet struct
 #[derive(Clone)]
 pub struct XB {
     pub ser: XBSer,
@@ -74,7 +77,7 @@ impl XB {
 
     May panic if an error occurs during initialization.
     */
-    pub fn new(mut ser: XBSer, initfile: Option<PathBuf>) -> (XB, crossbeam_channel::Sender<(XBDestAddr, Bytes)>) {
+    pub fn new(mut ser: XBSer, initfile: Option<PathBuf>) -> (XB, crossbeam_channel::Sender<XBTX>) {
         // FIXME: make this maximum of 5 configurable
         let (writertx, writerrx) = crossbeam_channel::bounded(5);
 
@@ -152,8 +155,11 @@ impl XB {
 }
 
 fn writerthread(ser: XBSer, maxpacketsize: usize,
-                writerrx: crossbeam_channel::Receiver<(XBDestAddr, Bytes)>) {
-    for (dest, data) in writerrx.iter() {
+                writerrx: crossbeam_channel::Receiver<XBTX>) {
+    for item in writerrx.iter() {
+        match item {
+            XBTX::Shutdown => return,
+            XBTX::TXData(dest, data) => {
         // Here we receive a block of data, which hasn't been
         // packetized.  Packetize it and send out the result.
 
@@ -175,6 +181,8 @@ fn writerthread(ser: XBSer, maxpacketsize: usize,
             },
             Err(e) => {
                 error!("Packetization error: {}", e);
+            }
+        }
             }
         }
     }

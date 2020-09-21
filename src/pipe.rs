@@ -29,7 +29,7 @@ use bytes::*;
 const INTERVAL: u64 = 5;
 
 pub fn stdin_processor(dest: u64, maxframesize: usize,
-                       sender: crossbeam_channel::Sender<(XBDestAddr, Bytes)>) -> io::Result<()> {
+                       sender: crossbeam_channel::Sender<XBTX>) -> io::Result<()> {
     let stdin = io::stdin();
     let mut br = io::BufReader::new(stdin);
     let mut buf = vec![0u8; maxframesize - 1];
@@ -38,10 +38,11 @@ pub fn stdin_processor(dest: u64, maxframesize: usize,
         let res = br.read(&mut buf)?;
         if res == 0 {
             // EOF
+            sender.send(XBTX::Shutdown).unwrap();
             return Ok(());
         }
 
-        sender.send((XBDestAddr::U64(dest), Bytes::copy_from_slice(&buf[0..res]))).unwrap();
+        sender.send(XBTX::TXData(XBDestAddr::U64(dest), Bytes::copy_from_slice(&buf[0..res]))).unwrap();
     }
 }
 
