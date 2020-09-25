@@ -74,18 +74,25 @@ impl XBTun {
     }
 
     pub fn get_xb_dest_mac(&self, ipaddr: &IpAddr) -> u64 {
+        trace!("Looking up destination for {}", ipaddr);
         if self.broadcast_everything {
+            trace!("broadcast_everything is on, so broadcast");
             return XB_BROADCAST;
         }
 
         match self.dests.lock().unwrap().get(ipaddr) {
             // Broadcast if we don't know it
-            None => XB_BROADCAST,
+            None => {
+                trace!("Destination not in map");
+                XB_BROADCAST
+            },
             Some((dest, expiration)) => {
                 if Instant::now() >= *expiration {
                     // Broadcast it if the cache entry has expired
+                    trace!("Destination expired");
                     XB_BROADCAST
                 } else {
+                    trace!("Destination {} found", dest);
                     *dest
                 }
             }
@@ -146,7 +153,7 @@ impl XBTun {
             match SlicedPacket::from_ip(&payload) {
                 Err(x) => {
                     warn!(
-                        "Packet from XBee wasn't valid IPv4 or IPv6; continueing anyhow: {:?}",
+                        "Packet from XBee wasn't valid IPv4 or IPv6; continuing anyhow: {:?}",
                         x
                     );
                 }
@@ -156,7 +163,7 @@ impl XBTun {
                         trace!("SERIN: Packet is {} -> {}", source, destination);
                         if !self.broadcast_everything {
                             self.dests.lock().unwrap().insert(
-                                destination,
+                                source,
                                 (
                                     fromu64,
                                     Instant::now().checked_add(self.max_ip_cache).unwrap(),
