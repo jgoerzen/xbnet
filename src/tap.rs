@@ -29,10 +29,9 @@ use crossbeam_channel;
 use etherparse::*;
 use log::*;
 use std::convert::TryInto;
+use std::collections::HashMap;
 use std::io;
-use std::io::{Read, Write};
-use std::mem::drop;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use ifstructs::ifreq;
 use libc;
 
@@ -46,6 +45,12 @@ pub struct XBTap {
     pub myethermacstr: String,
     pub name: String,
     pub tap: Arc<Iface>,
+
+    /** We can't just blindly generate destination MACs because there is a bug
+    in the firmware that causes the radio to lock up if we send too many
+    packets to a MAC that's not online.  So, we keep a translation map of
+    MACs we've seen. */
+    pub dests: Arc<Mutex<HashMap<[u8; 6], u64>>>,
 }
 
 impl XBTap {
@@ -82,14 +87,17 @@ impl XBTap {
             myxbmac
         );
 
-        let name = String::from(tap.name());
+        let mut desthm = HashMap::new();
+        desthm.insert(ETHER_BROADCAST, XB_BROADCAST);
+
 
         Ok(XBTap {
             myxbmac,
             myethermac,
             myethermacstr,
-            name,
+            name: String::from(name),
             tap: Arc::new(tap),
+            dests: Arc::new(Mutex::new(desthm)),
         })
     }
 
@@ -109,29 +117,29 @@ impl XBTap {
                 }
                 Ok(packet) => {
                     if let Some(LinkSlice::Ethernet2(header)) = packet.link {
+                        trace!("TAPIN: Packet is {} -> {}", hex::encode(header.source()), hex::encode(header.destination()));
                         if header.source() != &self.myethermac {
                             warn!("Packet from tap with MAC address {} mismatches my own MAC address of {}; proceeding anyway",
                                   showmac(header.source().try_into().unwrap()), self.myethermacstr);
                         }
-                        let destxbmac = if header.destination() == ETHER_BROADCAST {
-                            XB_BROADCAST
-                        } else {
-                            mac48to64(header.destination().try_into().unwrap(), self.myxbmac)
-                        };
-                        trace!("TAPIN: Packet is {} -> {}", hex::encode(header.source()), hex::encode(header.destination()));
-
-                        let res =
-                        sender
-                            .try_send(XBTX::TXData(
-                                XBDestAddr::U64(destxbmac),
-                                Bytes::copy_from_slice(tapdata),
-                            ));
-                        match res {
-                            Ok(()) => (),
-                            Err(crossbeam_channel::TrySendError::Full(_)) =>
-                                debug!("Dropped packet due to full TX buffer")
-                            ,
-                            Err(e) => Err(e).unwrap(),
+                        match self.dests.lock().unwrap().get(header.destination()) {
+                            None =>
+                                warn!("Destination MAC address unknown; discarding packet"),
+                            Some(destxbmac) =>
+                                {
+                                    let res =
+                                        sender
+                                        .try_send(XBTX::TXData(
+                                            XBDestAddr::U64(*destxbmac),
+                                            Bytes::copy_from_slice(tapdata),
+                                        ));
+                                    match res {
+                                        Ok(()) => (),
+                                        Err(crossbeam_channel::TrySendError::Full(_)) =>
+                                            debug!("Dropped packet due to full TX buffer"),
+                                        Err(e) => Err(e).unwrap(),
+                                    }
+                                }
                         }
                     } else {
                         warn!("Unable to get Ethernet2 header from tap packet; discarding");
@@ -145,7 +153,21 @@ impl XBTap {
         xbreframer: &mut XBReframer,
         ser: &mut XBSerReader) -> io::Result<()> {
         loop {
-            let (_fromu64, _fromu16, payload) = xbreframer.rxframe(ser);
+            let (fromu64, _fromu16, payload) = xbreframer.rxframe(ser);
+
+            // Register the sender in our map of known MACs
+            match SlicedPacket::from_ethernet(&payload) {
+                Err(x) => {
+                    warn!("Packet from XBee wasn't valid Ethernet; continueing anyhow: {:?}", x);
+                }
+                Ok(packet) => {
+                    if let Some(LinkSlice::Ethernet2(header)) = packet.link {
+                        trace!("SERIN: Packet Ethernet header is {} -> {}", hex::encode(header.source()), hex::encode(header.destination()));
+                        self.dests.lock().unwrap().insert(header.source().try_into().unwrap(), fromu64);
+                    }
+                }
+            }
+
             self.tap.send(&payload)?;
         }
     }
