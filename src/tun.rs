@@ -29,9 +29,8 @@ use crossbeam_channel;
 use etherparse::*;
 use log::*;
 use std::collections::HashMap;
-use std::convert::TryInto;
 use std::io;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::IpAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -51,7 +50,7 @@ pub struct XBTun {
 }
 
 impl XBTun {
-    pub fn new_tap(
+    pub fn new_tun(
         myxbmac: u64,
         broadcast_everything: bool,
         iface_name_requested: String,
@@ -62,7 +61,7 @@ impl XBTun {
 
         println!("Interface {} (XBee MAC {:x}) ready", name, myxbmac,);
 
-        let mut desthm = HashMap::new();
+        let desthm = HashMap::new();
 
         Ok(XBTun {
             myxbmac,
@@ -95,7 +94,6 @@ impl XBTun {
 
     pub fn frames_from_tun_processor(
         &self,
-        maxframesize: usize,
         sender: crossbeam_channel::Sender<XBTX>,
     ) -> io::Result<()> {
         let mut buf = [0u8; 9100]; // Enough to handle even jumbo frames
@@ -167,13 +165,6 @@ impl XBTun {
             self.tun.send(&payload)?;
         }
     }
-}
-
-pub fn showmac(mac: &[u8; 6]) -> String {
-    format!(
-        "{:x}:{:x}:{:x}:{:x}:{:x}:{:x}",
-        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
-    )
 }
 
 pub fn extract_ip<'a>(packet: &SlicedPacket<'a>) -> Option<IpAddr> {

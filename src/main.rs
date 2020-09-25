@@ -31,8 +31,8 @@ mod xbpacket;
 mod xbrx;
 
 use std::path::PathBuf;
+use std::time::Duration;
 use structopt::StructOpt;
-use tun_tap::Iface;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -92,6 +92,22 @@ enum Command {
         /// Broadcast every packet out the XBee side
         #[structopt(long)]
         broadcast_everything: bool,
+
+        /// Name for the interface; defaults to "xbnet%d" which the OS usually turns to "xbnet0".
+        /// Note that this name is not guaranteed; the name allocated by the OS is displayed
+        /// at startup.
+        #[structopt(long, default_value = "xbnet%d")]
+        iface_name: String,
+    },
+    /// Create a virtual IP interface and send frames across XBee
+    Tun {
+        /// Broadcast every packet out the XBee side
+        #[structopt(long)]
+        broadcast_everything: bool,
+
+        /** The maximum number of seconds to store the destination XBee MAC for an IP address. */
+        #[structopt(long)]
+        max_ip_cache: u64,
 
         /// Name for the interface; defaults to "xbnet%d" which the OS usually turns to "xbnet0".
         /// Note that this name is not guaranteed; the name allocated by the OS is displayed
@@ -167,7 +183,33 @@ fn main() {
                     .expect("Failure in frames_from_xb_processor");
             });
             tap_reader
-                .frames_from_tap_processor(maxpacketsize - 1, xbeesender)
+                .frames_from_tap_processor(xbeesender)
+                .expect("Failure in frames_from_tap_processor");
+            // Make sure queued up data is sent
+            let _ = writerthread.join();
+        }
+        Command::Tun {
+            broadcast_everything,
+            iface_name,
+            max_ip_cache
+        } => {
+            let max_ip_cache = Duration::from_secs(max_ip_cache);
+            let tun_reader = tun::XBTun::new_tun(
+                xb.mymac,
+                broadcast_everything,
+                iface_name,
+                max_ip_cache,
+            )
+            .expect("Failure initializing tun");
+            let tun_writer = tun_reader.clone();
+            let maxpacketsize = xb.maxpacketsize;
+            thread::spawn(move || {
+                tun_writer
+                    .frames_from_xb_processor(&mut xbreframer, &mut xb.ser_reader)
+                    .expect("Failure in frames_from_xb_processor");
+            });
+            tun_reader
+                .frames_from_tun_processor(xbeesender)
                 .expect("Failure in frames_from_tap_processor");
             // Make sure queued up data is sent
             let _ = writerthread.join();

@@ -95,7 +95,6 @@ impl XBTap {
 
     pub fn frames_from_tap_processor(
         &self,
-        maxframesize: usize,
         sender: crossbeam_channel::Sender<XBTX>,
     ) -> io::Result<()> {
         let mut buf = [0u8; 9100]; // Enough to handle even jumbo frames
