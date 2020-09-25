@@ -56,7 +56,7 @@ impl XBTun {
         broadcast_everything: bool,
         iface_name_requested: String,
         max_ip_cache: Duration,
-    ) -> io::Result<XBTap> {
+    ) -> io::Result<XBTun> {
         let tun = Iface::without_packet_info(&iface_name_requested, Mode::Tun)?;
         let name = tun.name();
 
@@ -153,9 +153,9 @@ impl XBTun {
                         trace!("SERIN: Packet dest is -> {}", toinsert);
                         if !self.broadcast_everything {
                             self.dests.lock().unwrap().insert(
-                                header.source().try_into().unwrap(),
+                                toinsert,
                                 (
-                                    toinsert,
+                                    fromu64,
                                     Instant::now().checked_add(self.max_ip_cache).unwrap(),
                                 ),
                             );
@@ -177,7 +177,7 @@ pub fn showmac(mac: &[u8; 6]) -> String {
 }
 
 pub fn extract_ip<'a>(packet: &SlicedPacket<'a>) -> Option<IpAddr> {
-    match packet.ip {
+    match &packet.ip {
         Some(InternetSlice::Ipv4(header)) => Some(IpAddr::V4(header.destination_addr())),
         Some(InternetSlice::Ipv6(header, _)) => Some(IpAddr::V6(header.destination_addr())),
         _ => None,
