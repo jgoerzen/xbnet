@@ -74,19 +74,20 @@ impl XBTun {
         })
     }
 
-    pub fn get_xb_dest_mac(&self, ipaddr: &IpAddr) -> Option<u64> {
+    pub fn get_xb_dest_mac(&self, ipaddr: &IpAddr) -> u64 {
         if self.broadcast_everything {
-            return Some(XB_BROADCAST);
+            return XB_BROADCAST;
         }
 
         match self.dests.lock().unwrap().get(ipaddr) {
-            None => Some(XB_BROADCAST),
+            // Broadcast if we don't know it
+            None => XB_BROADCAST,
             Some((dest, expiration)) => {
                 if *expiration >= Instant::now() {
-                    // Broadcast it if it's not in the cache
-                    Some(XB_BROADCAST)
+                    // Broadcast it if the cache entry has expired
+                    XB_BROADCAST
                 } else {
-                    Some(*dest)
+                    *dest
                 }
             }
         }
@@ -107,22 +108,10 @@ impl XBTun {
                     warn!("Error parsing packet from tun; discarding: {:?}", x);
                 }
                 Ok(packet) => {
-                    let destination = match packet.ip {
-                        Some(InternetSlice::Ipv4(header)) => {
-                            Some(IpAddr::V4(header.destination_addr()))
-                        }
-                        Some(InternetSlice::Ipv6(header, _)) => {
-                            Some(IpAddr::V6(header.destination_addr()))
-                        }
-                        _ => {
-                            warn!("Could not parse packet at IPv4 or IPv6; discarding");
-                            None
-                        }
-                    };
-
+                    let destination = extract_ip(&packet);
                     if let Some(destination) = destination {
                         let destxbmac = self.get_xb_dest_mac(&destination);
-                        trace!("TAPIN: Packet dest {} (MAC {x})", destination, destxbmac);
+                        trace!("TAPIN: Packet dest {} (MAC {:x})", destination, destxbmac);
                         let res = sender.try_send(XBTX::TXData(
                             XBDestAddr::U64(destxbmac),
                             Bytes::copy_from_slice(tundata),
@@ -151,31 +140,31 @@ impl XBTun {
             let (fromu64, _fromu16, payload) = xbreframer.rxframe(ser);
 
             // Register the sender in our map of known MACs
-            match SlicedPacket::from_ethernet(&payload) {
+            match SlicedPacket::from_ip(&payload) {
                 Err(x) => {
                     warn!(
-                        "Packet from XBee wasn't valid Ethernet; continueing anyhow: {:?}",
+                        "Packet from XBee wasn't valid IPv4 or IPv6; continueing anyhow: {:?}",
                         x
                     );
                 }
                 Ok(packet) => {
-                    if let Some(LinkSlice::Ethernet2(header)) = packet.link {
-                        trace!(
-                            "SERIN: Packet Ethernet header is {} -> {}",
-                            hex::encode(header.source()),
-                            hex::encode(header.destination())
-                        );
+                    let toinsert = extract_ip(&packet);
+                    if let Some(toinsert) = toinsert {
+                        trace!("SERIN: Packet dest is -> {}", toinsert);
                         if !self.broadcast_everything {
-                            self.dests
-                                .lock()
-                                .unwrap()
-                                .insert(header.source().try_into().unwrap(), fromu64);
+                            self.dests.lock().unwrap().insert(
+                                header.source().try_into().unwrap(),
+                                (
+                                    toinsert,
+                                    Instant::now().checked_add(self.max_ip_cache).unwrap(),
+                                ),
+                            );
                         }
                     }
                 }
             }
 
-            self.tap.send(&payload)?;
+            self.tun.send(&payload)?;
         }
     }
 }
@@ -185,4 +174,12 @@ pub fn showmac(mac: &[u8; 6]) -> String {
         "{:x}:{:x}:{:x}:{:x}:{:x}:{:x}",
         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
     )
+}
+
+pub fn extract_ip<'a>(packet: &SlicedPacket<'a>) -> Option<IpAddr> {
+    match packet.ip {
+        Some(InternetSlice::Ipv4(header)) => Some(IpAddr::V4(header.destination_addr())),
+        Some(InternetSlice::Ipv6(header, _)) => Some(IpAddr::V6(header.destination_addr())),
+        _ => None,
+    }
 }
