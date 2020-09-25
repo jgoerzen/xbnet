@@ -1,0 +1,45 @@
+name: build
+
+strategy:
+  matrix:
+    os: [ubuntu-latest, ubuntu-16.04]
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build for ${{ matrix.os }}
+      run: cargo build --verbose --release
+#    - name: Run tests
+#      run: cargo test --verbose
+    - name: Create Release for ${{ matrix.os }}
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
+    - name: Upload binaries to release for ${{ matrix.os }}
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: target/release/xbnet
+        asset_name: xbnet-${{ matrix.os }}.bin
+        tag: ${{ github.ref }}
+        overwrite: true
+        body: ""
