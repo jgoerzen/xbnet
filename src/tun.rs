@@ -82,7 +82,7 @@ impl XBTun {
             // Broadcast if we don't know it
             None => XB_BROADCAST,
             Some((dest, expiration)) => {
-                if *expiration >= Instant::now() {
+                if  Instant::now() >= *expiration {
                     // Broadcast it if the cache entry has expired
                     XB_BROADCAST
                 } else {
@@ -106,10 +106,10 @@ impl XBTun {
                     warn!("Error parsing packet from tun; discarding: {:?}", x);
                 }
                 Ok(packet) => {
-                    let destination = extract_ip(&packet);
-                    if let Some(destination) = destination {
+                    let ips = extract_ips(&packet);
+                    if let Some((source, destination)) = ips {
                         let destxbmac = self.get_xb_dest_mac(&destination);
-                        trace!("TAPIN: Packet dest {} (MAC {:x})", destination, destxbmac);
+                        trace!("TAPIN: Packet {} -> {} (MAC {:x})", source, destination, destxbmac);
                         let res = sender.try_send(XBTX::TXData(
                             XBDestAddr::U64(destxbmac),
                             Bytes::copy_from_slice(tundata),
@@ -146,12 +146,12 @@ impl XBTun {
                     );
                 }
                 Ok(packet) => {
-                    let toinsert = extract_ip(&packet);
-                    if let Some(toinsert) = toinsert {
-                        trace!("SERIN: Packet dest is -> {}", toinsert);
+                    let ips = extract_ips(&packet);
+                    if let Some((source, destination)) = ips {
+                        trace!("SERIN: Packet is {} -> {}", source, destination);
                         if !self.broadcast_everything {
                             self.dests.lock().unwrap().insert(
-                                toinsert,
+                                destination,
                                 (
                                     fromu64,
                                     Instant::now().checked_add(self.max_ip_cache).unwrap(),
@@ -167,10 +167,13 @@ impl XBTun {
     }
 }
 
-pub fn extract_ip<'a>(packet: &SlicedPacket<'a>) -> Option<IpAddr> {
+/// Returns the source and destination IPs
+pub fn extract_ips<'a>(packet: &SlicedPacket<'a>) -> Option<(IpAddr, IpAddr)> {
     match &packet.ip {
-        Some(InternetSlice::Ipv4(header)) => Some(IpAddr::V4(header.destination_addr())),
-        Some(InternetSlice::Ipv6(header, _)) => Some(IpAddr::V6(header.destination_addr())),
+        Some(InternetSlice::Ipv4(header)) => Some((IpAddr::V4(header.source_addr()),
+                                                  IpAddr::V4(header.destination_addr()))),
+        Some(InternetSlice::Ipv6(header, _)) => Some((IpAddr::V6(header.source_addr()),
+                                                      IpAddr::V6(header.destination_addr()))),
         _ => None,
     }
 }
