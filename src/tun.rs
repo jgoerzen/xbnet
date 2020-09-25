@@ -82,7 +82,7 @@ impl XBTun {
             // Broadcast if we don't know it
             None => XB_BROADCAST,
             Some((dest, expiration)) => {
-                if  Instant::now() >= *expiration {
+                if Instant::now() >= *expiration {
                     // Broadcast it if the cache entry has expired
                     XB_BROADCAST
                 } else {
@@ -109,7 +109,12 @@ impl XBTun {
                     let ips = extract_ips(&packet);
                     if let Some((source, destination)) = ips {
                         let destxbmac = self.get_xb_dest_mac(&destination);
-                        trace!("TAPIN: Packet {} -> {} (MAC {:x})", source, destination, destxbmac);
+                        trace!(
+                            "TAPIN: Packet {} -> {} (MAC {:x})",
+                            source,
+                            destination,
+                            destxbmac
+                        );
                         let res = sender.try_send(XBTX::TXData(
                             XBDestAddr::U64(destxbmac),
                             Bytes::copy_from_slice(tundata),
@@ -162,7 +167,12 @@ impl XBTun {
                 }
             }
 
-            self.tun.send(&payload)?;
+            match self.tun.send(&payload) {
+                Ok(_) => (),
+                Err(e) => {
+                    warn!("Failure to send packet to tun interface; have you given it an IP?  Error: {}", e);
+                }
+            }
         }
     }
 }
@@ -170,10 +180,14 @@ impl XBTun {
 /// Returns the source and destination IPs
 pub fn extract_ips<'a>(packet: &SlicedPacket<'a>) -> Option<(IpAddr, IpAddr)> {
     match &packet.ip {
-        Some(InternetSlice::Ipv4(header)) => Some((IpAddr::V4(header.source_addr()),
-                                                  IpAddr::V4(header.destination_addr()))),
-        Some(InternetSlice::Ipv6(header, _)) => Some((IpAddr::V6(header.source_addr()),
-                                                      IpAddr::V6(header.destination_addr()))),
+        Some(InternetSlice::Ipv4(header)) => Some((
+            IpAddr::V4(header.source_addr()),
+            IpAddr::V4(header.destination_addr()),
+        )),
+        Some(InternetSlice::Ipv6(header, _)) => Some((
+            IpAddr::V6(header.source_addr()),
+            IpAddr::V6(header.destination_addr()),
+        )),
         _ => None,
     }
 }

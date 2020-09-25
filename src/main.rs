@@ -191,16 +191,12 @@ fn main() {
         Command::Tun {
             broadcast_everything,
             iface_name,
-            max_ip_cache
+            max_ip_cache,
         } => {
             let max_ip_cache = Duration::from_secs(max_ip_cache);
-            let tun_reader = tun::XBTun::new_tun(
-                xb.mymac,
-                broadcast_everything,
-                iface_name,
-                max_ip_cache,
-            )
-            .expect("Failure initializing tun");
+            let tun_reader =
+                tun::XBTun::new_tun(xb.mymac, broadcast_everything, iface_name, max_ip_cache)
+                    .expect("Failure initializing tun");
             let tun_writer = tun_reader.clone();
             let maxpacketsize = xb.maxpacketsize;
             thread::spawn(move || {
