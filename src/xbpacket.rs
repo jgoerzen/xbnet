@@ -20,6 +20,7 @@
 use bytes::*;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
+use log::*;
 
 /** XBee transmissions can give either a 64-bit or a 16-bit destination
 address.  This permits the user to select one. */
@@ -191,12 +192,15 @@ impl PacketStream {
             return Ok(retval);
         }
 
+        trace!("xbpacket: data len {}", data.len());
         let chunks: Vec<&[u8]> = data.chunks(maxpacketsize - 1).collect();
-        let mut chunks_remaining: u8 = u8::try_from(chunks.len() - 1)
+        trace!("xbpacket: chunk count {}", chunks.len());
+        let mut chunks_remaining: u8 = u8::try_from(chunks.len())
             .map_err(|e| String::from("More than 255 chunks to transmit"))?;
         for chunk in chunks {
+            trace!("xbpacket: chunks_remaining: {}", chunks_remaining);
             let mut payload = BytesMut::new();
-            payload.put_u8(chunks_remaining);
+            payload.put_u8(chunks_remaining - 1);
             payload.put_slice(chunk);
             let frame_id = 0; // self.get_and_incr_framecounter(); // FIXME: make this configurable whether we get back TX reports.
             let packet = XBTXRequest {

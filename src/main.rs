@@ -98,9 +98,13 @@ fn main() {
                 ping::genpings(dest_u64, xbeesender).expect("Failure in genpings")
             });
             ping::displaypongs(&mut xbreframer, &mut xb.ser_reader);
+            // Make sure queued up data is sent
+            let _ = writerthread.join();
         }
         Command::Pong => {
             ping::pong(&mut xbreframer, &mut xb.ser_reader, xbeesender).expect("Failure in pong");
+            // Make sure queued up data is sent
+            let _ = writerthread.join();
         }
         Command::Pipe { dest } => {
             let dest_u64: u64 = u64::from_str_radix(&dest, 16).expect("Invalid destination");
@@ -124,6 +128,8 @@ fn main() {
             });
             tap_reader.frames_from_tap_processor(maxpacketsize - 1, xbeesender)
                      .expect("Failure in frames_from_tap_processor");
+            // Make sure queued up data is sent
+            let _ = writerthread.join();
         }
     }
 }
