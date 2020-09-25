@@ -48,6 +48,54 @@ This is the marquee feature of xbnet.  It provides a full TCP/IP stack across th
 
 This works by creating a virtual network device in Linux, called a "tun" device.  Traffic going out that device will be routed onto XBee, and traffic coming in will be routed to the computer.
 
+To make this work, you will first bring up the interface with xbnet.  Then, give it an IP address with ifconfig or ipaddr.  Do the same on the remote end, and boom, you can ping!
+
+Note that for this mode, xbnet must be run as root (or granted `CAP_NET_ADMIN`).
+
+Here's an example.  Start on machine A:
+
+```
+sudo xbnet /dev/ttyUSB3 tun
+```
+
+Wait until it tells you what interface it created.  By default, this will be **xbnet0**.  Now run:
+
+```
+sudo ip addr add 192.168.3.3/24 dev xbnet0
+sudo ip link set dev xbnet0 up
+```
+
+If you don't have the **ip** program, you can use the older-style **ifconfig** instead.  This one command does the same as the two newer-style ones above:
+
+```
+sudo ifconfig xbnet0 192.168.3.3 netmask 255.255.255.0 
+```
+
+Now, on machine B, start xbnet the same as on machine A.  Give it a different IP
+
+```
+sudo ip addr add 192.168.3.4/24 dev xbnet0
+sudo ip link set dev xbnet0 up
+```
+
+Now you can ping from A to B:
+
+```
+ping 192.168.3.4
+PING 192.168.3.4 (192.168.3.4) 56(84) bytes of data.
+64 bytes from 192.168.3.4: icmp_seq=1 ttl=64 time=130 ms
+64 bytes from 192.168.3.4: icmp_seq=2 ttl=64 time=89.1 ms
+64 bytes from 192.168.3.4: icmp_seq=3 ttl=64 time=81.6 ms
+```
+
+For more details, see the tun command below.
+
+## ETHERNET MODE WITH TAP
+
+The tap mode is similar to the tun mode, except it simulates a full Ethernet connection.  You might want this if you need to run a non-IP protocol, or if you want to do something like bridge two Ethernet segments.  The configuration is very similar.
+
+Be aware that a lot of programs generate broadcasts across an Ethernet interface, and bridging will do even more.  It would be easy to overwhelm your XBee network with this kind of cruft, so the tun mode is recommended unless you have a specific need for tap.
+
 ## TRANSPARENT MODE
 
 XBee systems have a "transparent mode" in which you can configure a particular destination and use them as a raw serial port.  You should definitely consider if this meets your needs for serial-based protocols; it would eliminate xbnet from the path entirely.
@@ -166,7 +214,7 @@ cu -h --line /dev/ttyUSB0 -s 9600 -e -o  --nostop
 
 # RUNNING TCP/IP OVER XBEE WITH PPP
 
-PPP is the fastest way to run TCP/IP over XBee with **xbnet** - and can work in transparent mode without xbnet as well.  It
+PPP is the fastest way to run TCP/IP over XBee with **xbnet** if you only need to have two nodes talk to each other.  PPP can work in transparent mode without xbnet as well.  It
 is subject to a few limitations:
 
 - PPP cannot support
@@ -213,27 +261,43 @@ limit; best to add firewall rules, etc.)
 
 Of course, ssh can nicely run over this, but for more versatility, consider the tap or tun options.
 
-## OPTIMIZING TCP/IP OVER LORA
+# PERFORMANCE TUNING
 
-It should be noted that a TCP ACK encapsulated in AX.25 takes 69 bytes
-to transmit -- that's a header with no data, and it's 69 bytes!  This
-is a significant overhead.  It can be dramatically reduced by using a
-larger packet size; for instance, in /etc/ax25/axports, thange the
-packet length of 70 to 1024.  This will now cause the
-**--maxpacketsize** option to take precedence and fragment the TCP/IP
-packets for transmission over XBee; they will, of course, be
-reassembled on the other end.  Setting **--txslot 2000** or a similar
-value will also be helpful in causing TCP ACKs to reach the remote end
-quicker, hopefully before timeouts expire.  **--pack** may also
-produce some marginal benefit.
+Here are some tips to improve performance:
 
-I have been using:
+## DISABLING XBEE ACKS
 
-```
-xbnet --initfile=init-fast.txt --txslot 2000 --pack --debug --maxpacketsize 200 --txwait 150
-```
+By default, the XBee system requests an acknowledgment from the remote node.  The XBee firmware will automatically attempt retransmits if they don't get an ACK in the expected timeframe.  Although higher-level protocols also will do ACK and retransmit, they don't have the XBee level of knowledge of the link layer timing and so XBee may be able to detect and correct for a missing packet much quicker.
 
-with success on a very clean (reasonably error-free) link.
+However, sometimes all these ACKs can cause significant degredation in performance.  Whether or not they do for you will depend on your network topology and usage patterns; you probably should just try it both ways.  Use **disable-xbee-acks** to disable the XBee level ACKs on messages sent from a given node and see what it does.
+
+## PROTOCOL SELECTION
+
+If all you really need is point-to-point, then consider using PPP rather than tun.  PPP supports header compression which may reduce the TCP/IP overhead significantly.
+
+## PACKET SIZE
+
+Bear in mind the underlying packet size.  For low-overhead protocols, you might want to use a packet size less than the XBee packet size.  For high-overhead protocols such as TCP, you may find that using large packet sizes and letting **xbnet** do fragmentation gives much better performance on clean links, especially at the lower XBee bitrates.
+
+## SERIAL COMMUNICATION SPEED
+
+By defualt, XBee modules communicate at 9600bps.  You should change this and write the updated setting to the module, and give it to xbnet with **--serial-speed**.
+
+# TROUBLESHOOTING
+
+## BROADCAST ISSUES
+
+# SECURITY
+
+xbnet is a low-level tool and should not be considered secure on its own.  The **xbnet pipe** command, for instance, will display information from any node on your mesh.  Here are some tips:
+
+Of course, begin by securing things at the XBee layer.  Enable encryption and passwords for remote AT commands in XBee.
+
+If you are running a network protocol across XBee, enable firewalls at every node on the network.  Remember, joining a node to a networked mesh is like giving it a port on your switch!  Consider how nodes can talk to each other.
+
+Use encryption and authentication at the application layer as well.  ssh or gpg would be a fantastic choice here.
+
+For nodes that are using xbnet to access the Internet, consider not giving them direct Internet access, but rather requiring them to access via something like OpenVPN or SSH forwarding.
 
 # INSTALLATION
 
@@ -259,70 +323,20 @@ before the port and command on the command line.
 **-h**, **--help**
 :  Display brief help on program operation.
 
-**--readqual**
-:  Attempt to read and log information about the RF quality of
-   incoming packets after each successful packet received.  There are
-   some corner cases where this is not possible.  The details will be
-   logged with **xbnet**'s logging facility, and are therefore only
-   visible if **--debug** is also used.
+**--disable-xbee-acks**
+:  Disable the XBee protocol-level acknowledgments of transmitted packets.  This may improve, or hurt, performance; see the conversation under the PERFORMANCE TUNING section.
 
-**--pack**
-:  Attempt to pack as many bytes into each transmitted frame as
-   possible.  Ordinarily, the **pipe** and **kiss** commands attempt
-   -- though do not guarantee -- to preserve original framing from the
-   operating system.  With **--pack**, instead the effort is made to
-   absolutely minimize the number of transmitted frames by putting as
-   much data as possible into each.
+**--initfile** *FILE*
+:  A file listing commands to send to the radio to initialize it.  Each command must yield an `OK` result from the radio.  After running these commands, **xbnet** will issue additional commands to ensure the radio is in the operating mode required by **xbnet**.  Enable **--debug** to see all initialization activity.
+   
+**--request-xbee-tx-reports**
+:  The XBee firmware can return back a report about the success or failure of a transmission.  **xbnet** has no use for these reports, though they are displayed for you if **--debug** is given.  By default, **xbnet** suppresses the generation of these reports.  If you give this option and **--debug**, then you can see them.
+
+**--serial-speed** *SPEED*
+:  Communicate with the XBee module at the given serial speed, given in bits per second (baud rate).  If not given, defaults to 9600, which is the Digi default for the XBee modules.  You can change this default with XBee commands and save the new default persistently to the board.  It is strongly recommended that you do so, because many XBee modules can communicate much faster than 9600bps.
 
 **-V**, **--version**
 :  Display the version number of **xbnet**.
-
-**--eotwait** *TIME*
-:  The amount of time in milliseconds to wait after receiving a packet
-   that indicates more are coming before giving up on receiving an
-   additional packet and proceeding to transmit.  Ideally this would
-   be at least the amount of time it takes to transmit 2 packets.
-   Default: 1000.
-   
-**--initfile** *FILE*
-:  A file listing commands to send to the radio to initialize it.
-   If not given, a default set will be used.
-   
-**--txwait** *TIME*
-:  Amount of time in milliseconds to pause before transmitting each
-   packet.  Due to processing delays on the receiving end, packets
-   cannot be transmitted immediately back to back.  Increase this if
-   you are seeing frequent receive errors for back-to-back packets,
-   which may be indicative of a late listen.  Experimentation has
-   shown that a value of 120 is needed for very large packets, and is
-   the default.  You may be able to use 50ms or less if you are
-   sending small packets.  In my testing, with 100-byte packets, 
-   a txwait of 50 was generally sufficient.
-
-**--txslot** TIME**
-:  The maximum of time in milliseconds for one end of the conversation
-   to continue transmitting without switching to receive mode.  This
-   is useful for protocols such as TCP that expect periodic ACKs and
-   get perturbed when they are not delivered in a timely manner.  If
-   **--txslot** is given, then after the given number of milliseconds
-   have elapsed, the next packet transmitted will signal to the other
-   end that it should take a turn.  If the transmitter has more data
-   to send, it is sent with a special flag of 2 to request the other
-   end to immediately send back a frame - data if it has some, or a "I
-   don't have anything, continue" frame otherwise.  After transmitting
-   flag 2, it will wait up to **txwait** seconds for the first packet
-   from the other end before continuing to transmit.  This setting is
-   not suitable when more than 2 radios are on-frequency.  Setting
-   txslot also enables responses to flag 2.  The default is 0, which
-   disables the txslot feature and is suitable for uses which do not
-   expect ACKs.
-
-**--maxpacketsize** *BYTES*
-:  The maximum frame size, in the range of 10 - 250.  The actual frame
-   transmitted over the air will be one byte larger due to
-   **xbnet** collision mitigation as described above.
-   Experimentation myself, and reports from others, suggests that XBee
-   works best when this is 100 or less.
 
 *PORT*
 :  The name of the serial port to which the radio is attached.
@@ -334,37 +348,49 @@ before the port and command on the command line.
 
 ## xbnet ... pipe
 
-The **pipe** subcommand is the main workhorse of the application and
-is described extensively above.
+The **pipe** subcommand permits piping data between radios.  It requires a **--dest** parameter, which gives the hex MAC address of the recipient of data sent to xbnet's stdin.  pipe is described extensively above.
+
+Note that **--dest** will not restrict the devices that xbnet will receive data from.
 
 ## xbnet ... ping
 
-The **ping** subcommand will transmit a simple line of text every 10
+The **ping** subcommand will transmit a simple line of text every 5
 seconds including an increasing counter.  It can be displayed at the
 other end with **xbnet ... pipe** or reflected with **xbnet
-... pong**.
+... pong**.  Like **pipe**, it requires a destination MAC address. 
 
 ## xbnet ... pong
 
 The **pong** subcommand receives packets and crafts a reply.  It is
-intended to be used with **xbnet ... ping**.  Its replies include
-the signal quality SNR and RSSI if available.
+intended to be used with **xbnet ... ping**. 
+
+## xbnet ... tun & tap
+
+These commands run a network stack across XBee and are described extensively above.  They have several optional parameters:
+
+**--broadcast-everything** (tun and tap)
+:  Normally, **xbnet** will use unicast (directed) transmissions to remotes where it knows their XBee MAC address.  This is more efficient on the XBee network.  However, in some cases you may simply want it to use broadcast packets for all transmissions, and this accomplishes that.
+
+**--broadcast-unknown** (tap only)
+:  Normally, **xbnet** will drop Ethernet frames destined for MAC addresses that it hasn't seen.  (Broadcast packets still go out.)  This is suitable for most situations.  However, you can also have it broadcast all packets do unknown MAC addresses.  This can be useful in some obscure situations such as multicast.
+
+**--disable-ipv4** and **disable-ipv6** (tun only)
+:  Disable all relaying of either IPv4 or IPv6 packets.  This is not valid in tap mode because tap doesn't operate at this protocol level.  It is recommended you disable protocols you don't use.
+
+**--iface-name** *NAME* (tun and tap)
+:  Request a specific name for the tun or tap interface.  By default, this requests **xbnet%d**.  The kernel replaces **%d** with an integer starting at 0, finding an unused interface.  It can be useful to specify an explicit interface here for use in scripts.
+
+**--max-ip-cache** *SECONDS* (tun only)
+:  Specifies how long it caches the XBee MAC address for a given IP address.  After this many seconds without receiving a packet from the given IP address, **xbnet** will send the next packet to the IP as a broadcast and then cache the result.  The only reason to expire IPs from the cache is if you re-provision them on other devices.  The tap mode doesn't have a timed cache, since the OS will re-ARP (generating a broadcast anyhow) if it fails to communicate with a given IP.
+
 
 # AUTHOR
 
 John Goerzen <jgoerzen@complete.org>
 
-# SEE ALSO
-
-I wrote an
-[introduction](https://changelog.complete.org/archives/10042-long-range-radios-a-perfect-match-for-unix-protocols-from-the-70s)
-and a [follow-up about
-TCP/IP](https://changelog.complete.org/archives/10048-tcp-ip-over-lora-radios)
-on my blog.
-
 # COPYRIGHT AND LICENSE
 
-Copyright (C) 2019  John Goerzen <jgoerzen@complete.org
+Copyright (C) 2019-2020  John Goerzen <jgoerzen@complete.org>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
