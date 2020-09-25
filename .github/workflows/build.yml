@@ -20,6 +20,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Prep build for ${{ matrix.os }}
+      run: sudo apt-get install libudev-dev
     - name: Build for ${{ matrix.os }}
       run: cargo build --verbose --release
 #    - name: Run tests
