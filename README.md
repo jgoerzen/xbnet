@@ -1,25 +1,16 @@
-# LoRa LoStik Pipe & Networking Tools
+# XBee Networking Tools
 
-So you have a fantastic long-range LoRa device, such as a Lostik, and
-you'd like to be able to do Unixy things with it -- maybe pipe stuff
-across the radio, maybe run a network over it.  That's what this is
-for.
+This package is for doing fantastic things with your XBee device.  You can, of course, already use it as a serial replacement, so you can run PPP and UUCP across it.
 
-Please see the [comprehensive documentation](https://github.com/jgoerzen/lorapipe/blob/master/doc/lorapipe.1.md).
+With xbnet, you can also run Ethernet across it.  Or TCP/IP (IPv4 and IPv6).  SPX if you want?  I guess so.
 
-This requires a [LoStik](https://ronoth.com/lostik) or other Microchip
-RN2903- or RN2483-based or  device that has been updated to firmware 1.0.5.  Details
-in the documentation.
+This is tested with the XBee SX modules, but ought to work with any modern XBee module.
 
-I wrote an
-[introduction](https://changelog.complete.org/archives/10042-long-range-radios-a-perfect-match-for-unix-protocols-from-the-70s)
-and a [follow-up about
-TCP/IP](https://changelog.complete.org/archives/10048-tcp-ip-over-lora-radios)
-on my blog.
+This is a followup to, and fork of, my [lorapipe](https://github.com/jgoerzen/lorapipe) project, which is something similar for LoRA radios.
 
 # Copyright
 
-    Copyright (C) 2019 John Goerzen <jgoerzen@complete.org>
+    Copyright (C) 2019-2020 John Goerzen <jgoerzen@complete.org>
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
