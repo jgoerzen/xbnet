@@ -1,10 +1,12 @@
 # XBee Networking Tools
 
-This package is for doing fantastic things with your XBee device.  You can, of course, already use it as a serial replacement, so you can run PPP and UUCP across it.
+This package is for doing fantastic things with your XBee device.  You can, of course, already use it as a serial replacement, so you can run PPP and UUCP across it.  XBee radios are low-cost, long-range, low-speed devices; with bitrates from 10Kbps to 250Kbps, they can reach many miles using simple antennas and low cost.
 
-With xbnet, you can also run Ethernet across it.  Or TCP/IP (IPv4 and IPv6).  SPX if you want?  I guess so.
+With xbnet, you can also run Ethernet across it.  Or ZModem.  Or TCP/IP (IPv4 and IPv6).  SPX if you want?  I guess so.  SSH?  Of course!
 
 This is tested with the XBee SX modules, but ought to work with any modern XBee module.
+
+XBee devices are particularly interesting because of their self-healing mesh (DigiMesh) technology.  They will auto-route traffic to the destination, via intermediate hops if necessary.  They also support bitrates high enough for a TCP stack, with nearly the range of LoRA.
 
 This is a followup to, and fork of, my [lorapipe](https://github.com/jgoerzen/lorapipe) project, which is something similar for LoRA radios.
 

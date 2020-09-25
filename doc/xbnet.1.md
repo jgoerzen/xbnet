@@ -1,227 +1,85 @@
-% LORAPIPE(1) John Goerzen | lorapipe Manual
+% XBNET(1) John Goerzen | xbnet Manual
 % John Goerzen
 % October 2019
 
 # NAME
 
-lorapipe - Transfer data and run a network over LoRa long-range radios
+xbnet - Transfer data and run a network over XBee long-range radios
 
 # SYNOPSIS
 
-**lorapipe** [ *OPTIONS* ] **PORT** **COMMAND** [ *command_options* ]
+**xbnet** [ *OPTIONS* ] **PORT** **COMMAND** [ *command_options* ]
 
 # OVERVIEW
 
-**lorapipe** is designed to integrate LoRa long-range radios into a
-Unix/Linux system.  In particular, lorapipe can:
+**xbnet** is designed to integrate XBee long-range radios into a
+Unix/Linux system.  In particular, xbnet can:
 
-- Bidirectionally pipe data across a LoRa radio system
-- Do an RF ping and report signal strength at each end
-- Operate an AX.25 network using LoRa, and atop it, TCP/IP
+- Bidirectionally pipe data across a XBee radio system
+- Do an RF ping
+- Operate as a virtual Ethernet device or a virtual tunnel device
+  - Run TCP/IP (IPv4 and IPv6) atop either of these.
 
 # HARDWARE REQUIREMENTS
 
-**lorapipe** is designed to run with a Microchip RN2903/RN2483 as
-implemented by LoStik.
+**xbnet** is designed to run with a Digi XBee device.  It is tested with the SX devices but should work with any.
 
 Drivers for other hardware may be added in the future.
 
-The Microchip firmware must be upgraded to 1.0.5 before running with
-**lorapipe**.  Previous versions lacked the `radio rxstop` command,
-which is a severe limitation when receiving multiple packets rapidly.
-
-See the documents tab for the
-[RN2093](https://www.microchip.com/wwwproducts/en/RN2903) and the
-[firmware upgrade
-guide](https://www.pocketmagic.net/rn2483-rn2903-firmware-upgrade-guide/) -
-note that the upgrade part is really finicky and you need the "offset" file.
-
 # PROTOCOL
 
-The **lorapipe pipe** command is the primary one of interest here.  It
-will receive data on stdin, break it up into LoRa-sized packets (see
-**--maxpacketsize**), and transmit it across the radio.  It also will
-receive data from the radio channel and send it to stdout.  No attempt
-at encryption or authentication is made; all packets successfully
-decoded will be sent to stdout.  Authentication and filtering is left
-to other layers of the stack atop **lorapipe**.
+XBee frames are smaller than typical Ethernet or TCP frames.  XBee frames, in fact, are typically limited to about 255 bytes on the SX series; other devices may have different limits.  Therefore, xbnet supports fragmentation and reassembly.  It will split a frame to be transmitted into the size supported by XBee, and reassemble on the other end.
 
-A thin layer atop **lorapipe pipe** is **lorapipe kiss**, which
-implements the AX.25 KISS protocol.  It transmits each KISS frame it
-receives as a LoRa frame, and vice-versa.  It performs rudimentary
-checking to ensure it is receiving valid KISS data, and will not pass
-anything else to stdout.  This support can be used to build a TCP/IP
-network atop LoRa as will be shown below.  Encryption and
-authentication could be added atop this by using tools such as OpenVPN
-or SSH.
+XBee, of course, cannot guarantee that all frames will be received, and therefore xbnet can't make that guarantee either.  However, the protocols you may run atop it -- from UUCP to ZModem to TCP/IP -- should handle this.
 
-**lorapipe** provides only the guarantees that LoRa itself does: that
-raw LoRa frames which are decoded are intact, but not all frames will
-be received.  It is somewhat akin to UDP in this sense.  Protocols
-such as UUCP, ZModem, or TCP can be layered atop **lorapipe** to
-transform this into a "reliable" connection.
+When running in **xbnet tap** mode, it is simulating an Ethernet interface.  Every Ethernet packet has a source and destination MAC address.  xbnet will maintain a cache of the Ethernet MAC addresses it has seen and what XBee MAC address they came from.  Therefore, when it sees a request to transmit to a certain Ethernet MAC, it will reuse what it knows from its cache and direct the packet to the appropriate XBee destination.  Ethernet broadcasts are converted into XBee broadcasts.
 
-## Broadcast Use and Separate Frequencies
-
-It is quite possible to use **lorapipe** to broadcast data to multiple
-listeners; an unlimited number of systems can run **lorapipe pipe**
-to receive data, and as long as there is nothing on stdin, they will
-happily decode data received over the air without transmitting
-anything.
-
-Separate communication channels may be easily achieved by selecting
-separate radio frequencies.
-
-## Collision Mitigation
-
-**lorapipe** cannot provide collision detection or avoidance, though
-it does impliement a collision mitigation strategy as described below.
-
-As LoRa radios are half-duplex (they cannot receive while
-transmitting), this poses challenges for quite a few applications that
-expect full-duplex communication or something like it.  In testing, a
-particular problem was observed with protocols that use transmission
-windows and send data in packets.  These protocols send ACKs after a
-successful packet transmission, which frequently collided with the
-next packet transmitted from the other radio.  This caused serious
-performance degredations, and for some protocols, complete failure.
-
-There is no carrier detect signal from the LoRa radio.  Therefore, a
-turn-based mechanism is implemented; with each frame transmitted, a
-byte is prepended indicating whether the sender has more data in queue
-to transmit or not.  The sender will continue transmitting until its
-transmit buffer is empty.  When that condition is reached, the
-other end will begin transmitting whatever is in its queue.  This
-enables protocols such as UUCP "g" and UUCP "i" to work quite well.
-
-A potential complication could arise if the "last" packet from the
-transmitter never arrives at the receiver; the receiver might
-therefore never take a turn to transmit.  To guard against this
-possibility, there is a timer, and after receiving no packets for a
-certain amount of time, the receiver will assume it is acceptable to
-transmit.  This timeout is set by the **--eotwait** option and
-defaults to 1000ms (1 second).
-
-The signal about whether or not data remains in the queue takes the
-form of a single byte prepended to every frame.  It is 0x00 if no data
-will follow immediately, and 0x01 if data exists in the transmitters
-queue which will be sent immediately.  The receiving side processes
-this byte and strips it off before handing the data to the
-application.  This byte is, however, visible under **--debug** mode,
-so you can observe the protocol at this low level.
+The **xbnet tun** mode operates in a similar fashion; it keeps a cache of seen IP addresses and their corresponding XBee MAC addresses, and directs packets appropriately.
 
 # RADIO PARAMETERS AND INITIALIZATION
 
-The Microchip command reference, available at
-<http://ww1.microchip.com/downloads/en/DeviceDoc/40001811A.pdf>,
-describes the parameters available for the radio.  A LoRa data rate
-calculator is available at
-<https://www.rfwireless-world.com/calculators/LoRa-Data-Rate-Calculator.html>
-to give you a rough sense of the speed of different parameters.  In
-general, by sacrificing speed, you can increase range and robustness
-of the signal.  The default initialization uses fairly slow and
-high-range settings:
-
-```
-sys get ver
-mac reset
-mac pause
-radio get mod
-radio get freq
-radio get pwr
-radio get sf
-radio get bw
-radio get cr
-radio get wdt
-radio set pwr 20
-radio set sf sf12
-radio set bw 125
-radio set cr 4/5
-radio set wdt 60000
-```
-
-The `get` commands will cause the pre-initialization settings to be
-output to stderr if `--debug` is used.  A maximum speed init would
-look like this:
-
-```
-sys get ver
-mac reset
-mac pause
-radio get mod
-radio get freq
-radio get pwr
-radio get sf
-radio get bw
-radio get cr
-radio get wdt
-radio set pwr 20
-radio set sf sf7
-radio set bw 500
-radio set cr 4/5
-radio set wdt 60000
-```
-
-You can craft your own parameters and pass them in with `--initfile`
-to customize the performance of your RF link.
-
-A particular hint: if `--debug` shows `radio_err` after a `radio rx 0`
-command, the radio is seeing carrier but is getting CRC errors
-decoding packets.  Increasing the code rate with `radio set cr` to a
-higher value such as `4/6` or even `4/8` will increase the FEC
-redundancy and enable it to decode some of those packets.  Increasing
-code rate will not help if there is complete silence from the radio
-during a transmission; for those situations, try decreasing bandwidth
-or increasing the spreading factor.  Note that coderate `4/5` to the
-radio is the same as `1` to the calculator, while `4/8` is the same as
-`4`.
-
-**Important note**: If you have the RN2483-based Lorastik, it requires
-a band as part of the `mac reset` command.  You will need to edit the
-config file to say either `mac reset 868` or `mac reset 433` depending
-on which band you will be using.  See
-<https://github.com/jgoerzen/lorapipe/issues/2> for further details.
-
-# PROTOCOL HINTS
-
-Although **lorapipe pipe** doesn't guarantee it preserves application
-framing, in many cases it does.  For applications that have their own
-framing, it is highly desirable to set their frame size to be less
-than the **--maxpacketsize** setting.  This will
-reduce the amount of data that would have to be retransmitted due to
-lost frames.
-
-As speed decreases, packet size should as well.
+This program requires API mode from the board.  It will perform that initialization automatically.   Additional configurations may be added by you using the **--initfile** option.
 
 # APPLICATION HINTS
+
+## FULL TCP/IP USING TUN
+
+This is the marquee feature of xbnet.  It provides a full TCP/IP stack across the XBee links, supporting both IPv4 and IPv6.  You can do anything you wish with the participating nodes in your mesh: ping, ssh, route the Internet across them, etc.  Up to you!  A Raspberry Pi with wifi and xbnet could provide an Internet gateway for an entire XBee mesh, if you so desire.
+
+This works by creating a virtual network device in Linux, called a "tun" device.  Traffic going out that device will be routed onto XBee, and traffic coming in will be routed to the computer.
+
+## TRANSPARENT MODE
+
+XBee systems have a "transparent mode" in which you can configure a particular destination and use them as a raw serial port.  You should definitely consider if this meets your needs for serial-based protocols; it would eliminate xbnet from the path entirely.
+
+However, you may still wish to use xbnet; perhaps for its debugging.  Also there are some scenarios (such at TCP/IP with multiple destinations) that really cannot be done in transparent mode -- and that is what xbnet is for, and where it shines.
 
 ## SOCAT
 
 The **socat**(1) program can be particularly helpful; it can gateway TCP
-ports and various other sorts of things into **lorapipe**.  This is
-helpful if the **lorapipe** system is across a network from the system
+ports and various other sorts of things into **xbnet**.  This is
+helpful if the **xbnet** system is across a network from the system
 you wish to run an application on.  **ssh**(1) can also be useful for
 this purpose.
 
 A basic command might be like this:
 
 ```
-socat TCP-LISTEN:12345 EXEC:'lorapipe /dev/ttyUSB0 pipe,pty,rawer'
+socat TCP-LISTEN:12345 EXEC:'xbnet /dev/ttyUSB0 pipe --dest=1234,pty,rawer'
 ```
 
 Some systems might require disabling buffering in some situations, or
 using a pty.  In those instances, something like this may be in order:
 
 ```
-socat TCP-LISTEN:10104 EXEC:'stdbuf -i0 -o0 -e0 lorapipe /dev/ttyUSB4 pipe,pty,rawer'
+socat TCP-LISTEN:10104 EXEC:'stdbuf -i0 -o0 -e0 xbnet /dev/ttyUSB4 pipe --dest=1234,pty,rawer'
 ```
 
 ## UUCP
 
 For UUCP, I recommend protocol `i` with the default window-size
 setting.  Use as large of a packet size as you can; for slow links,
-perhaps 32, up to around 100 for fast, high-quality links.  (LoRa seems to
-not do well with packets above 100 bytes).
+perhaps 32, up to around 244 for fast, high-quality links.
 
 Protocol `g` (or `G` with a smaller packet size) can also work, but
 won't work as well.
@@ -236,9 +94,9 @@ protocol-parameter i timeout 30
 chat-timeout 60
 ```
 
-Note that UUCP protocol i adds 10 bytes of overhead per packet, so
+Note that UUCP protocol i adds 10 bytes of overhead per packet and xbnet adds 1 byte of overhead, so
 this is designed to work with the default recommended packet size of
-100.
+255.
 
 Then in `/etc/uucp/port`:
 
@@ -249,19 +107,20 @@ reliable false
 
 ## YMODEM (and generic example of bidirectional pipe)
 
-ZModem makes a poor fit for LoRa because its smallest block size is
-1K.  YModem, however, uses a 128-byte block size.  Here's an example
+ZModem makes a good fit for the higher bitrate XBee modules.  For the slower settings, consider YModem; its 128-byte block size may be more suitable for very slow links than ZModem's 1K.
+
+Here's an example
 of how to make it work.  Let's say we want to transmit /bin/true over
 the radio.  We could run this:
 
 ```
-socat EXEC:'sz --ymodem /bin/true' EXEC:'lorapipe /dev/ttyUSB0 pipe,pty,rawer'
+socat EXEC:'sz --ymodem /bin/true' EXEC:'xbnet /dev/ttyUSB0 pipe --dest=1234,pty,rawer'
 ```
 
 And on the receiving end:
 
 ```
-socat EXEC:'rz --ymodem' EXEC:'lorapipe /dev/ttyUSB0 pipe,pty,rawer'
+socat EXEC:'rz --ymodem' EXEC:'xbnet /dev/ttyUSB0 pipe --dest=5678,pty,rawer'
 ```
 
 This approach can also be used with many other programs.  For
@@ -270,11 +129,9 @@ instance, `uucico -l` for UUCP logins.
 ## KERMIT
 
 Using the C-kermit distribution (**apt-get install ckermit**), you can
-configure for **lorapipe** like this:
+configure for **xbnet** like this:
 
 ```
-set receive packet-length 90
-set send packet-length 90
 set duplex half
 set window 2
 set receive timeout 10
@@ -284,7 +141,7 @@ set send timeout 10
 Then, on one side, run:
 
 ```
-pipe lorapipe /dev/ttyUSB0 pipe
+pipe xbnet /dev/ttyUSB0 pipe --dest=1234
 Ctrl-\ c
 server
 ```
@@ -292,7 +149,7 @@ server
 And on the other:
 
 ```
-pipe lorapipe /dev/ttyUSB0 pipe
+pipe xbnet /dev/ttyUSB0 pipe --dest=5678
 Ctrl-\ c
 ```
 
@@ -304,23 +161,23 @@ Now you can do things like `rdir` (to see ls from the remote), `get`,
 To interact directly with the modem, something like this will work:
 
 ```
-cu -h --line /dev/ttyUSB0 -s 57600 -e -o -f --nostop
+cu -h --line /dev/ttyUSB0 -s 9600 -e -o  --nostop
 ```
 
-# RUNNING TCP/IP OVER LORA WITH PPP
+# RUNNING TCP/IP OVER XBEE WITH PPP
 
-PPP is the fastest way to run TCP/IP over LoRa with **lorapipe**.  It
+PPP is the fastest way to run TCP/IP over XBee with **xbnet** - and can work in transparent mode without xbnet as well.  It
 is subject to a few limitations:
 
-- At most two devices must be using the frequency.  PPP cannot support
-  ad-hoc communication to multiple devices like AX.25 can (see below).
+- PPP cannot support
+  ad-hoc communication to multiple devices.  It is strictly point-to-point between two devices.
 - PPP compression should not be turned on.  This is because PPP
   normally assumes a lossless connection, and any dropped packets
   become rather expensive for PPP to handle, since compression has to
   be re-set.  Better to use compression at the protocol level; for
   instance, with **ssh -C**.
   
-To set up PPP, on one device, create /etc/ppp/peers/lora with this
+To set up PPP, on one device, create /etc/ppp/peers/xbee with this
 content:
 
 ```
@@ -342,7 +199,7 @@ Now, fire it up on each end with a command like this:
 
 ```
 socat EXEC:'pppd nodetach file /etc/ppp/peers/lora,pty,rawer' \
-  EXEC:'lorapipe --txslot 2000 --initfile=init-fast.txt --maxpacketsize 100 --txwait 120 /dev/ttyUSB0 pipe,pty,rawer'
+  EXEC:'xbnet --initfile=init-fast.txt /dev/ttyUSB0 pipe --dest=1234,pty,rawer'
 ```
 
 According to the PPP docs, an MRU of 296 might be suitable for slower
@@ -350,74 +207,11 @@ links.
 
 This will now permit you to ping across the link.  Additional options
 can be added to add, for instance, a bit of authentication at the
-start and so forth (though note that LoRa, being RF, means that a
+start and so forth (though note that XBee, being RF, means that a
 session could be hijacked, so don't put a lot of stock in this as a
 limit; best to add firewall rules, etc.)
 
-Of course, ssh can nicely run over this, and in my testing, PPP was
-the fastest method of running SSH over LoRa, beating out even AX.25.
-But then, that makes some sense, since AX.25 has to add addressing
-bits to every frame since it is a more LAN-like protocol.
-
-# RUNNING SSH AND/OR TCP/IP OVER AX.25 WITH KISS
-
-The AX.25 protocol was initially designed to be used for amateur radio
-purposes.  As the original amateur radio systems have a number of
-properties in common with LoRa, it makes a reasonable way to run a
-TCP/IP stack atop LoRa.  **lorapipe** supports it via the [KISS
-protocol](http://www.ax25.net/kiss.aspx), which is similar to PPP for
-AX.25.
-
-PPP normally assumes a reliable, point-to-point connection.  AX.25 and
-KISS allow for more than 2 devices to share a frequency.
-
-
-These instructions assume Debian or Raspbian.  Other operating systems
-may be different.
-
-First, install the AX.25 tools: `apt-get install ax25-tools
-ax25-apps socat`.
-
-Now, edit `/etc/ax25/axports` and add a line such as:
-
-```
-lora    NODE1           1200    70      1       lorapipe radio
-```
-
-This defines a port named **lora**, with fake "callsign" **NODE1**,
-speed 1200 (which is ignored), maximum packet length 70, and
-window 1.  Keep the packet length less than the **--maxpacketsize**.
-It is possible that KISS frames may expand due to escaping;
-**lorapipe** will fragment them in this case, but it is best to keep
-this size significantly less than the **lorapipe** max packet size to
-avoid fragmentation as much as possible.  On other machines, give them
-unique callsigns (NODE2 or FOO1 or whatever you like).
-
-Now, start KISS:
-
-```
-kissattach /dev/ptmx lora 192.168.2.2
-AX.25 port lora bound to device ax0
-Awaiting client connects on
-/dev/pts/7
-```
-
-That IP address was made up; you can use any RFC1918 IP address here;
-just make sure they're different on each node.
-
-It says to connect to /dev/pts/7, so we'll do just that:
-
-```
-socat /dev/pts/7,rawer \
-  EXEC:'lorapipe /dev/ttyUSB0 kiss,pty,rawer'
-```
-
-Now, assume you connected a second machine to 192.168.2.3, you should
-be able to ping and talk back and forth between them.  Standard
-commands will work at this stage.  You may wish to adjust the packet
-size in /etc/axports up from 70.
-
-To bring down the link, Ctrl-C the socat sessions and run `killall kissattach`.
+Of course, ssh can nicely run over this, but for more versatility, consider the tap or tun options.
 
 ## OPTIMIZING TCP/IP OVER LORA
 
@@ -427,7 +221,7 @@ is a significant overhead.  It can be dramatically reduced by using a
 larger packet size; for instance, in /etc/ax25/axports, thange the
 packet length of 70 to 1024.  This will now cause the
 **--maxpacketsize** option to take precedence and fragment the TCP/IP
-packets for transmission over LoRa; they will, of course, be
+packets for transmission over XBee; they will, of course, be
 reassembled on the other end.  Setting **--txslot 2000** or a similar
 value will also be helpful in causing TCP ACKs to reach the remote end
 quicker, hopefully before timeouts expire.  **--pack** may also
@@ -436,71 +230,21 @@ produce some marginal benefit.
 I have been using:
 
 ```
-lorapipe --initfile=init-fast.txt --txslot 2000 --pack --debug --maxpacketsize 200 --txwait 150
+xbnet --initfile=init-fast.txt --txslot 2000 --pack --debug --maxpacketsize 200 --txwait 150
 ```
 
 with success on a very clean (reasonably error-free) link.
 
-## More on Linux AX.25
-
-For more information, see:
-
-- [The Linux AX.25 HOWTO](http://www.tldp.org/HOWTO/AX25-HOWTO/)
-
-## SSH OVER AX.25 WITHOUT TCP/IP
-
-Before **lorapipe** introduced frame combining and  **--txslot**,
-performance of SSH over TCP/IP was as low as 25% of its performance
-over native AX.25.   With the addition of the above features, it has
-achieved parity with native AX.25 on fairly clean links.
-
-There is somewhat more effort on running SSH atop AX.25 natively,
-since it was not designed to run in such a way.  We can make it work,
-however.
-
-First, on the node which will run the SSH server -- in this example it
-will be NODE1 -- create an /etc/ax25/ax25d.conf file with contents
-like this:
-
-```[NODE1-1 VIA *]
-NOCALL   * * * * * *  L
-default  * * * * * *  - root  /usr/bin/socat socat -b 220 STDIO TCP:localhost:22
-```
-
-This will cause it to accept connections on AX.25 port 1 (in NODE1-1,
-the part after the dash is the AX.25 port number), and redirect to
-local TCP port 22, ssh.  The -b 220 assumes the packet length is 220
-in /etc/ax25/axports, and causes ssh data to not exceed that length.
-
-Now you can fire it up with **ax25d -l**.
-
-Connecting to it requires an 8-bit clean AX.25 connection.
-Unfortunately, **axcall(1)** does not provide this.  **ax25_call**
-can, but it must be modified to cause it to not emit the
-"Connecting..." and "Connected" messages which will confuse ssh.  Once
-done, the connection can be initiated with:
-
-```
-ssh -v -o "ProxyCommand=socat -b 220 STDIO EXEC:'/path/ax25_call -i 220 -o 220 lora NODE2 NODE1-1,pty,rawer'" user@host
-```
-
-NODE2 is the node name that ssh is running on, and NODE1 is the
-destination node.  Replace every instance of 220 here with your
-maximum packet length.
-
-This is a somewhat fragile setup, and it is recommended to use TCP
-instead, in general.
-
 # INSTALLATION
 
-**lorapipe** is a Rust program and can be built by running **`cargo
+**xbnet** is a Rust program and can be built by running **`cargo
 build --release`**.  The executable will then be placed in
-**target/release/lorapipe**. Rust can be easily installed from
+**target/release/xbnet**. Rust can be easily installed from
 <https://www.rust-lang.org/>. 
 
 # INVOCATION
 
-Every invocation of **lorapipe** requires at least the name of a
+Every invocation of **xbnet** requires at least the name of a
 serial port (for instance, **/dev/ttyUSB0**) and a subcommand to run.
 
 # GLOBAL OPTIONS
@@ -519,7 +263,7 @@ before the port and command on the command line.
 :  Attempt to read and log information about the RF quality of
    incoming packets after each successful packet received.  There are
    some corner cases where this is not possible.  The details will be
-   logged with **lorapipe**'s logging facility, and are therefore only
+   logged with **xbnet**'s logging facility, and are therefore only
    visible if **--debug** is also used.
 
 **--pack**
@@ -531,7 +275,7 @@ before the port and command on the command line.
    much data as possible into each.
 
 **-V**, **--version**
-:  Display the version number of **lorapipe**.
+:  Display the version number of **xbnet**.
 
 **--eotwait** *TIME*
 :  The amount of time in milliseconds to wait after receiving a packet
@@ -576,8 +320,8 @@ before the port and command on the command line.
 **--maxpacketsize** *BYTES*
 :  The maximum frame size, in the range of 10 - 250.  The actual frame
    transmitted over the air will be one byte larger due to
-   **lorapipe** collision mitigation as described above.
-   Experimentation myself, and reports from others, suggests that LoRa
+   **xbnet** collision mitigation as described above.
+   Experimentation myself, and reports from others, suggests that XBee
    works best when this is 100 or less.
 
 *PORT*
@@ -588,22 +332,22 @@ before the port and command on the command line.
 
 # SUBCOMMANDS
 
-## lorapipe ... pipe
+## xbnet ... pipe
 
 The **pipe** subcommand is the main workhorse of the application and
 is described extensively above.
 
-## lorapipe ... ping
+## xbnet ... ping
 
 The **ping** subcommand will transmit a simple line of text every 10
 seconds including an increasing counter.  It can be displayed at the
-other end with **lorapipe ... pipe** or reflected with **lorapipe
+other end with **xbnet ... pipe** or reflected with **xbnet
 ... pong**.
 
-## lorapipe ... pong
+## xbnet ... pong
 
 The **pong** subcommand receives packets and crafts a reply.  It is
-intended to be used with **lorapipe ... ping**.  Its replies include
+intended to be used with **xbnet ... ping**.  Its replies include
 the signal quality SNR and RSSI if available.
 
 # AUTHOR

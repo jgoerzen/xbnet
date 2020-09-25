@@ -35,9 +35,9 @@ pub struct XBSerWriter {
 }
 
 /// Initialize the serial system, configuring the port.
-pub fn new(portname: PathBuf) -> io::Result<(XBSerReader, XBSerWriter)> {
+pub fn new(portname: PathBuf, speed: u32) -> io::Result<(XBSerReader, XBSerWriter)> {
     let settings = SerialPortSettings {
-        baud_rate: 115200, // FIXME: make this configurable, default 9600
+        baud_rate: speed,
         data_bits: DataBits::Eight,
         flow_control: FlowControl::Hardware,
         parity: Parity::None,

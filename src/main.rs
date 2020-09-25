@@ -50,9 +50,13 @@ struct Opt {
     #[structopt(long, parse(from_os_str))]
     initfile: Option<PathBuf>,
 
-    #[structopt(parse(from_os_str))]
     /// Serial port to use to communicate with radio
+    #[structopt(parse(from_os_str))]
     port: PathBuf,
+
+    /// The speed in bps (baud rate) to use to communicate on the serial port
+    #[structopt(long, default_value = "9600")]
+    serial_speed: u32,
 
     /// Disable the Xbee-level ACKs
     #[structopt(long)]
@@ -114,6 +118,15 @@ enum Command {
         /// at startup.
         #[structopt(long, default_value = "xbnet%d")]
         iface_name: String,
+
+        /// Disable all IPv4 support
+        #[structopt(long)]
+        disable_ipv4: bool,
+
+        /// Disable all IPv6 support
+        #[structopt(long)]
+        disable_ipv6: bool,
+
     },
 }
 
@@ -126,7 +139,7 @@ fn main() {
     }
     info!("xbnet starting");
 
-    let (ser_reader, ser_writer) = ser::new(opt.port).expect("Failed to initialize serial port");
+    let (ser_reader, ser_writer) = ser::new(opt.port, opt.serial_speed).expect("Failed to initialize serial port");
     let (mut xb, xbeesender, writerthread) = xb::XB::new(
         ser_reader,
         ser_writer,
@@ -176,7 +189,6 @@ fn main() {
             )
             .expect("Failure initializing tap");
             let tap_writer = tap_reader.clone();
-            let maxpacketsize = xb.maxpacketsize;
             thread::spawn(move || {
                 tap_writer
                     .frames_from_xb_processor(&mut xbreframer, &mut xb.ser_reader)
@@ -192,13 +204,14 @@ fn main() {
             broadcast_everything,
             iface_name,
             max_ip_cache,
+            disable_ipv4,
+            disable_ipv6,
         } => {
             let max_ip_cache = Duration::from_secs(max_ip_cache);
             let tun_reader =
-                tun::XBTun::new_tun(xb.mymac, broadcast_everything, iface_name, max_ip_cache)
+                tun::XBTun::new_tun(xb.mymac, broadcast_everything, iface_name, max_ip_cache, disable_ipv4, disable_ipv6)
                     .expect("Failure initializing tun");
             let tun_writer = tun_reader.clone();
-            let maxpacketsize = xb.maxpacketsize;
             thread::spawn(move || {
                 tun_writer
                     .frames_from_xb_processor(&mut xbreframer, &mut xb.ser_reader)

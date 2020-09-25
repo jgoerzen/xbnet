@@ -43,6 +43,8 @@ pub struct XBTun {
     pub broadcast_everything: bool,
     pub tun: Arc<Iface>,
     pub max_ip_cache: Duration,
+    pub disable_ipv4: bool,
+    pub disable_ipv6: bool,
 
     /** The map from IP Addresses (v4 or v6) to destination MAC addresses.  Also
     includes a timestamp at which the destination expires. */
@@ -55,6 +57,8 @@ impl XBTun {
         broadcast_everything: bool,
         iface_name_requested: String,
         max_ip_cache: Duration,
+        disable_ipv4: bool,
+        disable_ipv6: bool,
     ) -> io::Result<XBTun> {
         let tun = Iface::without_packet_info(&iface_name_requested, Mode::Tun)?;
         let name = tun.name();
@@ -67,6 +71,8 @@ impl XBTun {
             myxbmac,
             broadcast_everything,
             max_ip_cache,
+            disable_ipv4,
+            disable_ipv6,
             name: String::from(name),
             tun: Arc::new(tun),
             dests: Arc::new(Mutex::new(desthm)),
@@ -110,6 +116,19 @@ impl XBTun {
                 Ok(packet) => {
                     let ips = extract_ips(&packet);
                     if let Some((source, destination)) = ips {
+                        match destination {
+                            IpAddr::V6(_) =>
+                                if self.disable_ipv6 {
+                                    debug!("Dropping packet because --disable-ipv6 given");
+                                    return Ok(());
+                                },
+                            IpAddr::V4(_) =>
+                                if self.disable_ipv4 {
+                                    debug!("Dropping packet because --disable-ipv4 given");
+                                    return Ok(());
+                                }
+                        };
+
                         let destxbmac = self.get_xb_dest_mac(&destination);
                         trace!(
                             "TAPIN: Packet {} -> {} (MAC {:x})",
@@ -156,6 +175,18 @@ impl XBTun {
                     let ips = extract_ips(&packet);
                     if let Some((source, destination)) = ips {
                         trace!("SERIN: Packet is {} -> {}", source, destination);
+                        match source {
+                            IpAddr::V6(_) =>
+                                if self.disable_ipv6 {
+                                    debug!("Dropping packet because --disable-ipv6 given");
+                                    return Ok(());
+                                },
+                            IpAddr::V4(_) =>
+                                if self.disable_ipv4 {
+                                    debug!("Dropping packet because --disable-ipv4 given");
+                                    return Ok(());
+                                }
+                        }
                         if !self.broadcast_everything {
                             self.dests.lock().unwrap().insert(
                                 source,
