@@ -1,5 +1,8 @@
 # XBee Networking Tools
 
+![build](https://github.com/jgoerzen/xbnet/workflows/build/badge.svg) ![docs](https://docs.rs/xbnet/badge.svg)
+
+
 This package is for doing fantastic things with your XBee device.  You can, of course, already use it as a serial replacement, so you can run PPP and UUCP across it.  XBee radios are low-cost, long-range, low-speed devices; with bitrates from 10Kbps to 250Kbps, they can reach many miles using simple antennas and low cost.
 
 With xbnet, you can also run Ethernet across it.  Or ZModem.  Or TCP/IP (IPv4 and IPv6).  SPX if you want?  I guess so.  SSH?  Of course!

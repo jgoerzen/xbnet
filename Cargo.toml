@@ -24,7 +24,7 @@ description = "Run TCP/IP over XBee RF radio links"
 homepage = "https://github.com/jgoerzen/covid19db"
 repository = "https://github.com/jgoerzen/covid19db/"
 readme = "README.md"
-keyworkds = ["radio", "networking", "serial", "xbee"]
+keywords = ["radio", "networking", "serial", "xbee"]
 categories = ["embedded", "network-programming", "command-line-utilities"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
