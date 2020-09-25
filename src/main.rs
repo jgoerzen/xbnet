@@ -25,6 +25,7 @@ mod ping;
 mod pipe;
 mod ser;
 mod tap;
+mod tun;
 mod xb;
 mod xbpacket;
 mod xbrx;

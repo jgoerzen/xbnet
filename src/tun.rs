@@ -40,7 +40,9 @@ pub const XB_BROADCAST: u64 = 0xffff;
 
 #[derive(Clone)]
 pub struct XBTap {
+    pub myethermac: [u8; 6],
     pub myxbmac: u64,
+    pub myethermacstr: String,
     pub name: String,
     pub broadcast_unknown: bool,
     pub broadcast_everything: bool,
@@ -55,12 +57,35 @@ pub struct XBTap {
 
 impl XBTap {
     pub fn new_tap(myxbmac: u64, broadcast_unknown: bool, broadcast_everything: bool, iface_name_requested: String) -> io::Result<XBTap> {
+        let myethermac = mac64to48(myxbmac);
+        let myethermacstr = showmac(&myethermac);
         let tap = Iface::without_packet_info(&iface_name_requested, Mode::Tap)?;
         let name = tap.name();
 
+        // Set the MAC address.
+        let mut sa_data = [0u8 as libc::c_char; 14];
+        let c_mac: Vec<libc::c_char> = myethermac[..].iter().map(|x| *x as libc::c_char).collect();
+        sa_data[0..=5].copy_from_slice(c_mac.as_slice());
+        let sockaddr = libc::sockaddr {sa_family: libc::ARPHRD_ETHER,
+                                       sa_data
+        };
+
+        let mut ifr = ifreq::from_name(name).unwrap();
+        ifr.ifr_ifru.ifr_hwaddr = sockaddr;
+
+        unsafe {
+        let socket = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+        assert!(socket >= 0);
+        let pointer: *mut ifreq = &mut ifr;
+        let ioctlres = libc::ioctl(socket, libc::SIOCSIFHWADDR, pointer);
+        assert!(ioctlres != -1);
+        libc::close(socket);
+        }
+
         println!(
-            "Interface {} (XBee MAC {:x}) ready",
+            "Interface {} with ether MAC {} (XBee MAC {:x}) ready",
             name,
+            myethermacstr,
             myxbmac,
         );
 
@@ -70,6 +95,8 @@ impl XBTap {
 
         Ok(XBTap {
             myxbmac,
+            myethermac,
+            myethermacstr,
             broadcast_unknown,
             broadcast_everything,
             name: String::from(name),
@@ -111,6 +138,10 @@ impl XBTap {
                 Ok(packet) => {
                     if let Some(LinkSlice::Ethernet2(header)) = packet.link {
                         trace!("TAPIN: Packet is {} -> {}", hex::encode(header.source()), hex::encode(header.destination()));
+                        if header.source() != &self.myethermac {
+                            warn!("Packet from tap with MAC address {} mismatches my own MAC address of {}; proceeding anyway",
+                                  showmac(header.source().try_into().unwrap()), self.myethermacstr);
+                        }
                         match self.get_xb_dest_mac(header.destination().try_into().unwrap()) {
                             None =>
                                 warn!("Destination MAC address unknown; discarding packet"),
