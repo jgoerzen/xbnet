@@ -192,13 +192,13 @@ impl PacketStream {
             return Ok(retval);
         }
 
-        trace!("xbpacket: data len {}", data.len());
+        // trace!("xbpacket: data len {}", data.len());
         let chunks: Vec<&[u8]> = data.chunks(maxpacketsize - 1).collect();
-        trace!("xbpacket: chunk count {}", chunks.len());
+        // trace!("xbpacket: chunk count {}", chunks.len());
         let mut chunks_remaining: u8 = u8::try_from(chunks.len())
             .map_err(|e| String::from("More than 255 chunks to transmit"))?;
         for chunk in chunks {
-            trace!("xbpacket: chunks_remaining: {}", chunks_remaining);
+            // trace!("xbpacket: chunks_remaining: {}", chunks_remaining);
             let mut payload = BytesMut::new();
             payload.put_u8(chunks_remaining - 1);
             payload.put_slice(chunk);
