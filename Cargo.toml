@@ -32,3 +32,4 @@ format_escape_default = "0.1.1"
 structopt = {version = "0.3", default-features = false}
 tun-tap = {version = "0.1.2", default-features = false}
 bytes = "0.5"
+etherparse = "0.9.0"

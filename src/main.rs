@@ -24,6 +24,7 @@ use std::thread;
 mod ping;
 mod pipe;
 mod ser;
+mod tap;
 mod xb;
 mod xbpacket;
 mod xbrx;
