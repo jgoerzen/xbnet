@@ -75,7 +75,21 @@ enum Command {
         // FIXME: add a paremter to accept data from only that place
     },
     /// Create a virtual Ethernet interface and send frames across XBee
-    Tap,
+    Tap {
+        /// Broadcast to XBee, instead of dropping, packets to unknown destinations.  Has no effect if --broadcast_everything is given.
+        #[structopt(long)]
+        broadcast_unknown: bool,
+
+        /// Broadcast every packet out the XBee side
+        #[structopt(long)]
+        broadcast_everything: bool,
+
+        /// Name for the interface; defaults to "xbnet%d" which the OS usually turns to "xbnet0".
+        /// Note that this name is not guaranteed; the name allocated by the OS is displayed
+        /// at startup.
+        #[structopt(long, default_value = "xbnet%d")]
+        iface_name: String,
+    },
 }
 
 fn main() {
@@ -118,8 +132,8 @@ fn main() {
             // Make sure queued up data is sent
             let _ = writerthread.join();
         }
-        Command::Tap => {
-            let tap_reader = tap::XBTap::new_tap(xb.mymac).expect("Failure initializing tap");
+        Command::Tap { broadcast_unknown, broadcast_everything, iface_name } => {
+            let tap_reader = tap::XBTap::new_tap(xb.mymac, broadcast_unknown, broadcast_everything, iface_name).expect("Failure initializing tap");
             let tap_writer = tap_reader.clone();
             let maxpacketsize = xb.maxpacketsize;
             thread::spawn(move || {

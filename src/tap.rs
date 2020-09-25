@@ -44,6 +44,8 @@ pub struct XBTap {
     pub myxbmac: u64,
     pub myethermacstr: String,
     pub name: String,
+    pub broadcast_unknown: bool,
+    pub broadcast_everything: bool,
     pub tap: Arc<Iface>,
 
     /** We can't just blindly generate destination MACs because there is a bug
@@ -54,10 +56,10 @@ pub struct XBTap {
 }
 
 impl XBTap {
-    pub fn new_tap(myxbmac: u64) -> io::Result<XBTap> {
+    pub fn new_tap(myxbmac: u64, broadcast_unknown: bool, broadcast_everything: bool, iface_name_requested: String) -> io::Result<XBTap> {
         let myethermac = mac64to48(myxbmac);
         let myethermacstr = showmac(&myethermac);
-        let tap = Iface::without_packet_info("xbnet%d", Mode::Tap)?;
+        let tap = Iface::without_packet_info(&iface_name_requested, Mode::Tap)?;
         let name = tap.name();
 
         // Set the MAC address.
@@ -84,7 +86,7 @@ impl XBTap {
             "Interface {} with ether MAC {} (XBee MAC {:x}) ready",
             name,
             myethermacstr,
-            myxbmac
+            myxbmac,
         );
 
         let mut desthm = HashMap::new();
@@ -95,10 +97,28 @@ impl XBTap {
             myxbmac,
             myethermac,
             myethermacstr,
+            broadcast_unknown,
+            broadcast_everything,
             name: String::from(name),
             tap: Arc::new(tap),
             dests: Arc::new(Mutex::new(desthm)),
         })
+    }
+
+    pub fn get_xb_dest_mac(&self, ethermac: &[u8; 6]) -> Option<u64> {
+        if self.broadcast_everything {
+            return Some(XB_BROADCAST);
+        }
+
+        match self.dests.lock().unwrap().get(ethermac) {
+            None =>
+                if self.broadcast_unknown {
+                    Some(XB_BROADCAST)
+                } else {
+                    None
+                },
+            Some(dest) => Some(*dest),
+        }
     }
 
     pub fn frames_from_tap_processor(
@@ -122,7 +142,7 @@ impl XBTap {
                             warn!("Packet from tap with MAC address {} mismatches my own MAC address of {}; proceeding anyway",
                                   showmac(header.source().try_into().unwrap()), self.myethermacstr);
                         }
-                        match self.dests.lock().unwrap().get(header.destination()) {
+                        match self.get_xb_dest_mac(header.destination().try_into().unwrap()) {
                             None =>
                                 warn!("Destination MAC address unknown; discarding packet"),
                             Some(destxbmac) =>
@@ -130,7 +150,7 @@ impl XBTap {
                                     let res =
                                         sender
                                         .try_send(XBTX::TXData(
-                                            XBDestAddr::U64(*destxbmac),
+                                            XBDestAddr::U64(destxbmac),
                                             Bytes::copy_from_slice(tapdata),
                                         ));
                                     match res {
@@ -163,7 +183,9 @@ impl XBTap {
                 Ok(packet) => {
                     if let Some(LinkSlice::Ethernet2(header)) = packet.link {
                         trace!("SERIN: Packet Ethernet header is {} -> {}", hex::encode(header.source()), hex::encode(header.destination()));
-                        self.dests.lock().unwrap().insert(header.source().try_into().unwrap(), fromu64);
+                        if ! self.broadcast_everything {
+                            self.dests.lock().unwrap().insert(header.source().try_into().unwrap(), fromu64);
+                        }
                     }
                 }
             }
