@@ -106,7 +106,7 @@ enum Command {
         broadcast_everything: bool,
 
         /** The maximum number of seconds to store the destination XBee MAC for an IP address. */
-        #[structopt(long)]
+        #[structopt(long, default_value = "300")]
         max_ip_cache: u64,
 
         /// Name for the interface; defaults to "xbnet%d" which the OS usually turns to "xbnet0".
