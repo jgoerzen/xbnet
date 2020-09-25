@@ -4,6 +4,7 @@ name: build
 on:
   push:
     branches: [ master ]
+    tags: '*'
   pull_request:
     branches: [ master ]
 
@@ -16,7 +17,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, ubuntu-16.04]
+        os: [ubuntu-18.04]
 
     steps:
     - uses: actions/checkout@v2
@@ -24,11 +25,12 @@ jobs:
       run: sudo apt-get install libudev-dev
     - name: Build for ${{ matrix.os }}
       run: cargo build --verbose --release
-#    - name: Run tests
-#      run: cargo test --verbose
+    - name: Run tests for ${{ matrix.os }}
+      run: cargo test --verbose
     - name: Create Release for ${{ matrix.os }}
       id: create_release
       uses: actions/create-release@v1
+      continue-on-error: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
