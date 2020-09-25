@@ -31,6 +31,7 @@ mod xbrx;
 
 use std::path::PathBuf;
 use structopt::StructOpt;
+use tun_tap::Iface;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -73,6 +74,8 @@ enum Command {
         dest: String,
         // FIXME: add a paremter to accept data from only that place
     },
+    /// Create a virtual Ethernet interface and send frames across XBee
+    Tap,
 }
 
 fn main() {
@@ -110,6 +113,17 @@ fn main() {
                 .expect("Failure in stdin_processor");
             // Make sure queued up data is sent
             let _ = writerthread.join();
+        }
+        Command::Tap => {
+            let tap_reader = tap::XBTap::new_tap(xb.mymac).expect("Failure initializing tap");
+            let tap_writer = tap_reader.clone();
+            let maxpacketsize = xb.maxpacketsize;
+            thread::spawn(move || {
+                tap_writer.frames_from_xb_processor(&mut xbreframer, &mut xb.ser_reader)
+                    .expect("Failure in frames_from_xb_processor");
+            });
+            tap_reader.frames_from_tap_processor(maxpacketsize - 1, xbeesender)
+                     .expect("Failure in frames_from_tap_processor");
         }
     }
 }
