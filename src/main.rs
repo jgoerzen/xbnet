@@ -53,6 +53,14 @@ struct Opt {
     /// Serial port to use to communicate with radio
     port: PathBuf,
 
+    /// Disable the Xbee-level ACKs
+    #[structopt(long)]
+    disable_xbee_acks: bool,
+
+    /// Request XBee transmit reports.  These will appear in debug mode but otherwise are not considered.
+    #[structopt(long)]
+    request_xbee_tx_reports: bool,
+
     #[structopt(subcommand)]
     cmd: Command,
 }
@@ -102,7 +110,7 @@ fn main() {
     info!("xbnet starting");
 
     let (ser_reader, ser_writer) = ser::new(opt.port).expect("Failed to initialize serial port");
-    let (mut xb, xbeesender, writerthread) = xb::XB::new(ser_reader, ser_writer, opt.initfile);
+    let (mut xb, xbeesender, writerthread) = xb::XB::new(ser_reader, ser_writer, opt.initfile, opt.disable_xbee_acks, opt.request_xbee_tx_reports);
     let mut xbreframer = xbrx::XBReframer::new();
 
     match opt.cmd {

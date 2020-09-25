@@ -81,6 +81,8 @@ impl XB {
         mut ser_reader: XBSerReader,
         mut ser_writer: XBSerWriter,
         initfile: Option<PathBuf>,
+        disable_xbee_acks: bool,
+        request_xbee_tx_reports: bool,
     ) -> (XB, crossbeam_channel::Sender<XBTX>, thread::JoinHandle<()>) {
         // FIXME: make this maximum of 5 configurable
         let (writertx, writerrx) = crossbeam_channel::bounded(5);
@@ -146,7 +148,7 @@ impl XB {
 
         debug!("Radio configuration complete");
 
-        let writerthread = thread::spawn(move || writerthread(ser_writer, maxpacketsize, writerrx));
+        let writerthread = thread::spawn(move || writerthread(ser_writer, maxpacketsize, writerrx, disable_xbee_acks, request_xbee_tx_reports));
 
         (
             XB {
@@ -164,6 +166,8 @@ fn writerthread(
     mut ser: XBSerWriter,
     maxpacketsize: usize,
     writerrx: crossbeam_channel::Receiver<XBTX>,
+    disable_xbee_acks: bool,
+    request_xbee_tx_reports: bool,
 ) {
     let mut packetstream = PacketStream::new();
     for item in writerrx.iter() {
@@ -173,7 +177,7 @@ fn writerthread(
                 // Here we receive a block of data, which hasn't been
                 // packetized.  Packetize it and send out the result.
 
-                match packetstream.packetize_data(maxpacketsize, &dest, &data) {
+                match packetstream.packetize_data(maxpacketsize, &dest, &data, disable_xbee_acks, request_xbee_tx_reports) {
                     Ok(packets) => {
                         for packet in packets.into_iter() {
                             match packet.serialize() {

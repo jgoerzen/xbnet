@@ -186,6 +186,8 @@ impl PacketStream {
         maxpacketsize: usize,
         dest: &XBDestAddr,
         data: &[u8],
+        disable_xbee_acks: bool,
+        request_xbee_tx_reports: bool,
     ) -> Result<Vec<XBTXRequest>, String> {
         let mut retval = Vec::new();
         if data.is_empty() {
@@ -202,12 +204,20 @@ impl PacketStream {
             let mut payload = BytesMut::new();
             payload.put_u8(chunks_remaining - 1);
             payload.put_slice(chunk);
-            let frame_id = 0; // self.get_and_incr_framecounter(); // FIXME: make this configurable whether we get back TX reports.
+            let frame_id = if request_xbee_tx_reports {
+                self.get_and_incr_framecounter()
+            } else {
+                0
+            };
             let packet = XBTXRequest {
                 frame_id,
                 dest_addr: dest.clone(),
                 broadcast_radius: 0,
-                transmit_options: 0x01, // FIXME: make this configurable whether or not to request ACKs (0x01 disables; 0x00 default)
+                transmit_options: if disable_xbee_acks {
+                    0x01
+                } else {
+                    0
+                },
                 payload: Bytes::from(payload),
             };
 
