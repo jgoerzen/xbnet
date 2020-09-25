@@ -74,25 +74,20 @@ impl XBTun {
     }
 
     pub fn get_xb_dest_mac(&self, ipaddr: &IpAddr) -> u64 {
-        trace!("Looking up destination for {}", ipaddr);
         if self.broadcast_everything {
-            trace!("broadcast_everything is on, so broadcast");
             return XB_BROADCAST;
         }
 
         match self.dests.lock().unwrap().get(ipaddr) {
             // Broadcast if we don't know it
             None => {
-                trace!("Destination not in map");
                 XB_BROADCAST
             },
             Some((dest, expiration)) => {
                 if Instant::now() >= *expiration {
                     // Broadcast it if the cache entry has expired
-                    trace!("Destination expired");
                     XB_BROADCAST
                 } else {
-                    trace!("Destination {} found", dest);
                     *dest
                 }
             }
