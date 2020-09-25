@@ -18,9 +18,9 @@
 */
 
 use bytes::*;
+use log::*;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
-use log::*;
 
 /** XBee transmissions can give either a 64-bit or a 16-bit destination
 address.  This permits the user to select one. */
@@ -213,11 +213,7 @@ impl PacketStream {
                 frame_id,
                 dest_addr: dest.clone(),
                 broadcast_radius: 0,
-                transmit_options: if disable_xbee_acks {
-                    0x01
-                } else {
-                    0
-                },
+                transmit_options: if disable_xbee_acks { 0x01 } else { 0 },
                 payload: Bytes::from(payload),
             };
 

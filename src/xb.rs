@@ -148,7 +148,15 @@ impl XB {
 
         debug!("Radio configuration complete");
 
-        let writerthread = thread::spawn(move || writerthread(ser_writer, maxpacketsize, writerrx, disable_xbee_acks, request_xbee_tx_reports));
+        let writerthread = thread::spawn(move || {
+            writerthread(
+                ser_writer,
+                maxpacketsize,
+                writerrx,
+                disable_xbee_acks,
+                request_xbee_tx_reports,
+            )
+        });
 
         (
             XB {
@@ -177,7 +185,13 @@ fn writerthread(
                 // Here we receive a block of data, which hasn't been
                 // packetized.  Packetize it and send out the result.
 
-                match packetstream.packetize_data(maxpacketsize, &dest, &data, disable_xbee_acks, request_xbee_tx_reports) {
+                match packetstream.packetize_data(
+                    maxpacketsize,
+                    &dest,
+                    &data,
+                    disable_xbee_acks,
+                    request_xbee_tx_reports,
+                ) {
                     Ok(packets) => {
                         for packet in packets.into_iter() {
                             match packet.serialize() {

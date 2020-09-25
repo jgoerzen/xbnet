@@ -111,7 +111,13 @@ fn main() {
     info!("xbnet starting");
 
     let (ser_reader, ser_writer) = ser::new(opt.port).expect("Failed to initialize serial port");
-    let (mut xb, xbeesender, writerthread) = xb::XB::new(ser_reader, ser_writer, opt.initfile, opt.disable_xbee_acks, opt.request_xbee_tx_reports);
+    let (mut xb, xbeesender, writerthread) = xb::XB::new(
+        ser_reader,
+        ser_writer,
+        opt.initfile,
+        opt.disable_xbee_acks,
+        opt.request_xbee_tx_reports,
+    );
     let mut xbreframer = xbrx::XBReframer::new();
 
     match opt.cmd {
@@ -141,16 +147,28 @@ fn main() {
             // Make sure queued up data is sent
             let _ = writerthread.join();
         }
-        Command::Tap { broadcast_unknown, broadcast_everything, iface_name } => {
-            let tap_reader = tap::XBTap::new_tap(xb.mymac, broadcast_unknown, broadcast_everything, iface_name).expect("Failure initializing tap");
+        Command::Tap {
+            broadcast_unknown,
+            broadcast_everything,
+            iface_name,
+        } => {
+            let tap_reader = tap::XBTap::new_tap(
+                xb.mymac,
+                broadcast_unknown,
+                broadcast_everything,
+                iface_name,
+            )
+            .expect("Failure initializing tap");
             let tap_writer = tap_reader.clone();
             let maxpacketsize = xb.maxpacketsize;
             thread::spawn(move || {
-                tap_writer.frames_from_xb_processor(&mut xbreframer, &mut xb.ser_reader)
+                tap_writer
+                    .frames_from_xb_processor(&mut xbreframer, &mut xb.ser_reader)
                     .expect("Failure in frames_from_xb_processor");
             });
-            tap_reader.frames_from_tap_processor(maxpacketsize - 1, xbeesender)
-                     .expect("Failure in frames_from_tap_processor");
+            tap_reader
+                .frames_from_tap_processor(maxpacketsize - 1, xbeesender)
+                .expect("Failure in frames_from_tap_processor");
             // Make sure queued up data is sent
             let _ = writerthread.join();
         }
