@@ -11,6 +11,8 @@ This is tested with the XBee SX modules, but ought to work with any modern XBee 
 
 XBee devices are particularly interesting because of their self-healing mesh (DigiMesh) technology.  They will auto-route traffic to the destination, via intermediate hops if necessary.  They also support bitrates high enough for a TCP stack, with nearly the range of LoRA.
 
+**For details, see the [extensive documentation](https://github.com/jgoerzen/xbnet/blob/master/doc/xbnet.1.md)**.
+
 This is a followup to, and fork of, my [lorapipe](https://github.com/jgoerzen/lorapipe) project, which is something similar for LoRA radios.
 
 # Copyright
