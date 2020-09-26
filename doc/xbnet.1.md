@@ -123,6 +123,14 @@ using a pty.  In those instances, something like this may be in order:
 socat TCP-LISTEN:10104 EXEC:'stdbuf -i0 -o0 -e0 xbnet /dev/ttyUSB4 pipe --dest=1234,pty,rawer'
 ```
 
+You can send a file this way; for instance, on one end:
+
+```
+socet 'EXEC:sz -vv -b /bin/sh,pipes' EXEC:xbnet /dev/ttyUSB4 pipe --dest 1234,nofork,pipes'
+```
+
+And on the other, you use `rz` instead of `sz`.
+
 ## UUCP
 
 For UUCP, I recommend protocol `i` with the default window-size

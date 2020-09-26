@@ -120,12 +120,12 @@ impl XBTun {
                             IpAddr::V6(_) =>
                                 if self.disable_ipv6 {
                                     debug!("Dropping packet because --disable-ipv6 given");
-                                    return Ok(());
+                                    continue;
                                 },
                             IpAddr::V4(_) =>
                                 if self.disable_ipv4 {
                                     debug!("Dropping packet because --disable-ipv4 given");
-                                    return Ok(());
+                                    continue;
                                 }
                         };
 
@@ -179,12 +179,12 @@ impl XBTun {
                             IpAddr::V6(_) =>
                                 if self.disable_ipv6 {
                                     debug!("Dropping packet because --disable-ipv6 given");
-                                    return Ok(());
+                                    continue;
                                 },
                             IpAddr::V4(_) =>
                                 if self.disable_ipv4 {
                                     debug!("Dropping packet because --disable-ipv4 given");
-                                    return Ok(());
+                                    continue;
                                 }
                         }
                         if !self.broadcast_everything {
